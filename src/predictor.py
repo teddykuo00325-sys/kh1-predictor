@@ -32,6 +32,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 from . import analyzer, festivals
 from .analyzer import tokenize
+from .cache import ttl_cache
 
 
 # How many days before/after the festival's solar date count as "this festival period".
@@ -559,7 +560,11 @@ def predict_next_version() -> dict | None:
 # ---------------------------------------------------- main entry (legacy month mode)
 def predict(target: date | None = None) -> dict:
     target = target or _default_target()
-    year, month = target.year, target.month
+    return _predict_month_cached(target.year, target.month)
+
+
+@ttl_cache(300)
+def _predict_month_cached(year: int, month: int) -> dict:
     acts = analyzer.load_activities()
 
     fest = festival_candidates(year, month, acts)
@@ -602,7 +607,11 @@ def predict_rolling(today: date | None = None,
     This is the practical "what's coming up?" view — it crosses month boundaries
     so end-of-May activities and start-of-June festivals appear together.
     """
-    today = today or date.today()
+    return _predict_rolling_cached(today or date.today(), look_back, look_forward)
+
+
+@ttl_cache(300)        # 5 min — heavy work, results stable until DB changes (next deploy)
+def _predict_rolling_cached(today: date, look_back: int, look_forward: int) -> dict:
     window_start = today - timedelta(days=look_back)
     window_end   = today + timedelta(days=look_forward)
 

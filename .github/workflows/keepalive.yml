@@ -1,0 +1,39 @@
+name: Keep Render service warm
+
+# Render's free tier suspends a service after 15 min of inactivity.  This
+# workflow pings /healthz on a 10-minute schedule so the container stays alive.
+#
+# GitHub Actions cron triggers can be delayed up to ~10 min during platform
+# high-load periods (start of every hour is especially busy).  A 10-min nominal
+# interval keeps the worst-case interval below the 15-min sleep threshold most
+# of the time.  If you still see cold starts, also add a job at cron-job.org.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'      # nominal every 10 minutes (UTC)
+  workflow_dispatch: {}          # let me run it manually from the Actions tab
+
+# We never need more than one ping in flight; cancel an older one if a new tick fires.
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping kh1-predictor /healthz
+        run: |
+          set -eu
+          URL="https://kh1-predictor.onrender.com/healthz"
+          echo "GET $URL"
+          # -f fails on HTTP >=400; -m 90 covers cold-start (~30-60s on Render free)
+          curl -fsS -m 90 "$URL" || {
+            echo "ping failed, retrying once after 30s…"
+            sleep 30
+            curl -fsS -m 90 "$URL"
+          }

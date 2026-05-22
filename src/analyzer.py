@@ -10,6 +10,7 @@ from typing import Iterable
 import jieba
 
 from . import db, festivals
+from .cache import ttl_cache
 
 # silence jieba banner on import
 jieba.setLogLevel(60)
@@ -43,6 +44,7 @@ def _month_of(dt: str | None) -> int | None:
             return None
 
 
+@ttl_cache(60)        # DB rarely changes between requests; 60s cache plenty
 def load_activities() -> list[dict]:
     with db.connect() as conn:
         rows = conn.execute(
@@ -160,6 +162,20 @@ def _parse_dt(s: str | None) -> date | None:
 def yearly_recurrence_stats(acts: list[dict] | None = None,
                              min_avg_per_year: float = 2.0,
                              min_years_active: int = 2) -> list[dict]:
+    if acts is None:
+        return _yearly_recurrence_cached(min_avg_per_year, min_years_active)
+    return _yearly_recurrence_stats_impl(acts, min_avg_per_year, min_years_active)
+
+
+@ttl_cache(300)
+def _yearly_recurrence_cached(min_avg_per_year: float, min_years_active: int) -> list[dict]:
+    return _yearly_recurrence_stats_impl(load_activities(),
+                                          min_avg_per_year, min_years_active)
+
+
+def _yearly_recurrence_stats_impl(acts: list[dict],
+                                    min_avg_per_year: float,
+                                    min_years_active: int) -> list[dict]:
     """For every activity signature, compute yearly cycle stats.
 
     Only returns signatures that appear at least `min_avg_per_year` times per year
