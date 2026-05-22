@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}循環活動統計{% endblock %}
+
+{% macro monthbar(month_dist) -%}
+  {# 12 small bars showing month distribution. Max bar height proportional to max count #}
+  {% set max_v = month_dist.values()|list|max if month_dist.values()|list else 1 %}
+  <div style="display:flex;gap:2px;align-items:flex-end;height:30px;">
+    {% for m in range(1,13) %}
+      {% set v = month_dist[m] %}
+      {% set pct = (v / max_v * 100) if max_v else 0 %}
+      <div title="{{ m }}月: {{ v }}次"
+           style="width:14px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;">
+        <div style="width:100%;background:{% if v > 0 %}var(--accent){% else %}var(--border){% endif %};
+                    height:{{ pct if v > 0 else 4 }}%;border-radius:1px;
+                    {% if v == 0 %}opacity:0.3;{% endif %}"></div>
+        <div style="font-size:8px;color:var(--muted);text-align:center;line-height:10px;">{{ m }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+{% block content %}
+<div class="card">
+  <h2>🔁 一年多次循環活動統計</h2>
+  <p class="muted">把歷年活動依照名稱模糊比對，統計每個活動年均出現次數、月份分佈，並依平均間隔推算「下次預估出現日」。</p>
+
+  <form class="toolbar" method="get" action="/recurring">
+    <label class="muted">年均次數 ≥</label>
+    <input type="number" name="min" value="{{ min_avg }}" step="0.5" min="1" max="20" style="width:70px;">
+    <label class="muted">至少出現年數</label>
+    <input type="number" name="years" value="{{ min_years }}" min="1" max="10" style="width:60px;">
+    <label class="muted">類型</label>
+    <select name="kind">
+      <option value="">全部</option>
+      {% for k in ['festival','recharge','pvp','mall','upgrade','boost','other'] %}
+        <option value="{{ k }}" {% if kind==k %}selected{% endif %}>{{ k }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">套用</button>
+    <a href="/recurring" class="muted" style="padding:6px 10px;">↻ 重設</a>
+    <span class="muted" style="margin-left:auto;">{{ rows|length }} 個樣板 · 今天 {{ today }}</span>
+  </form>
+</div>
+
+{% if not rows %}
+<div class="card"><p class="muted">沒有符合條件的循環活動。試試降低「年均次數」門檻或縮小至少年數。</p></div>
+{% endif %}
+
+{% for r in rows %}
+<div class="card" style="padding:14px 22px;">
+  <div style="display:grid;grid-template-columns:1fr 130px 200px 160px 160px;gap:16px;align-items:center;">
+
+    <!-- 活動名稱 + 類型 -->
+    <div>
+      <b style="font-size:14px;">{{ r.name_example }}</b>
+      <span class="pill" style="margin-left:6px;">{{ r.kind }}</span>
+      <br>
+      <span class="muted" style="font-size:11px;">key: {{ r.signature }}</span>
+      <details><summary class="muted" style="font-size:11px;cursor:pointer;">歷年範例</summary>
+        <ul style="margin:4px 0;padding-left:16px;font-size:12px;">
+        {% for y, ex in r.examples_by_year.items() %}
+          <li>
+            <b>{{ y }}</b> ·
+            <a href="/article/{{ ex.article_id }}">{{ ex.publish_date }}</a>
+            · {{ ex.name }}
+            {% if ex.start_dt %}<span class="muted">({{ ex.start_dt[:10] }} ~ {{ ex.end_dt[:10] if ex.end_dt else '?' }})</span>{% endif %}
+          </li>
+        {% endfor %}
+        </ul>
+      </details>
+    </div>
+
+    <!-- 年均次數 -->
+    <div style="text-align:center;">
+      <div style="font-size:24px;color:var(--accent);font-weight:bold;">{{ r.avg_per_year }}</div>
+      <div class="muted" style="font-size:11px;">次 / 年 (共 {{ r.total_count }} 次 / {{ r.years_active }} 年)</div>
+    </div>
+
+    <!-- 月份分佈 -->
+    <div>
+      {{ monthbar(r.month_distribution) }}
+    </div>
+
+    <!-- 上次 -->
+    <div>
+      <div class="muted" style="font-size:11px;">上次出現</div>
+      <div style="font-weight:bold;">{{ r.last_occurrence or '?' }}</div>
+      {% if r.median_gap_days %}
+      <div class="muted" style="font-size:11px;">平均間隔 {{ r.median_gap_days }} 天</div>
+      {% endif %}
+    </div>
+
+    <!-- 預估下次 -->
+    <div>
+      <div class="muted" style="font-size:11px;">預估下次</div>
+      <div style="font-weight:bold;color:{% if r.predicted_next_date and r.predicted_next_date >= today %}var(--good){% else %}var(--muted){% endif %};">
+        {{ r.predicted_next_date or '?' }}
+      </div>
+      {% if r.predicted_next_date and r.predicted_next_date < today %}
+      <div class="muted" style="font-size:11px;">應該已過或延後</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 各年份分佈條 -->
+  <div style="margin-top:10px;font-size:11px;color:var(--muted);">
+    各年次數：
+    {% for y, c in r.per_year_counts.items()|sort %}
+      <span class="pill" style="margin:0 3px;">{{ y }}: {{ c }} 次</span>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

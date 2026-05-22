@@ -98,6 +98,28 @@ def activities():
     return render_template("activities.html", rows=rows, kind=kind, q=q)
 
 
+@app.route("/recurring")
+def recurring():
+    """Yearly recurrence statistics: which activities cycle multiple times a year."""
+    try:
+        min_avg = float(request.args.get("min", 2.0))
+    except ValueError:
+        min_avg = 2.0
+    try:
+        min_years = int(request.args.get("years", 2))
+    except ValueError:
+        min_years = 2
+    kind = request.args.get("kind", "")
+    rows = analyzer.yearly_recurrence_stats(min_avg_per_year=min_avg,
+                                              min_years_active=min_years)
+    if kind:
+        rows = [r for r in rows if r["kind"] == kind]
+    today = date.today()
+    return render_template("recurring.html",
+                            rows=rows, min_avg=min_avg, min_years=min_years,
+                            kind=kind, today=today.isoformat())
+
+
 @app.route("/recharge")
 def recharge():
     with db.connect() as conn:
