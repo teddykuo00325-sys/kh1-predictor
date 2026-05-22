@@ -18,6 +18,11 @@ concurrency:
 permissions:
   contents: write                # needed to commit the backup file
 
+# Opt-in to Node 24 ahead of GitHub's June 2026 default switch so the
+# actions/checkout step stops emitting the deprecation warning.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   update:
     runs-on: ubuntu-latest
