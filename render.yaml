@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: kh1-predictor
+    env: python
+    plan: free
+    pythonVersion: "3.11"
+    # Build-time: install deps, then scrape every article and extract activities
+    # into data/news.db.  The resulting DB lives inside Render's build artifact,
+    # so it survives container sleep/wake cycles until the next deploy.
+    buildCommand: |
+      pip install -r requirements.txt
+      python -m src.scraper
+      python -m src.extractor
+    # Runtime: gunicorn (production WSGI), single worker is plenty for free tier
+    # (limited to 0.1 CPU / 512MB).  Threads handle concurrent requests cheaply.
+    startCommand: gunicorn --workers 1 --threads 4 --timeout 90 --bind 0.0.0.0:$PORT src.app:app
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: PYTHONIOENCODING
+        value: utf-8

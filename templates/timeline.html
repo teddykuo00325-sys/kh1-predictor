@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}歷史時間軸{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>📅 歷史活動時間軸</h2>
+  <p class="muted">依公告月份分群</p>
+</div>
+
+{% for ym, items in buckets %}
+<div class="card">
+  <h2>{{ ym }} <span class="muted" style="font-weight:normal;">({{ items|length }} 條活動)</span></h2>
+  <table>
+    <tr><th>活動</th><th>類型</th><th>關鍵字</th><th>來源公告</th></tr>
+    {% for a in items %}
+    <tr>
+      <td><b>{{ a.name }}</b>{% if a.start_dt %}<br><span class="muted">{{ a.start_dt }} ~ {{ a.end_dt }}</span>{% endif %}</td>
+      <td><span class="pill">{{ a.kind }}</span></td>
+      <td>{% for k in a.keywords %}{% if k %}<span class="pill">{{ k }}</span>{% endif %}{% endfor %}</td>
+      <td><a href="/article/{{ a.article_id }}">#{{ a.article_id }}</a> <span class="muted">{{ a.publish_date }}</span></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endfor %}
+{% endblock %}

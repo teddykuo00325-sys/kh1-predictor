@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}活動字典{% endblock %}
+{% block content %}
+<div class="card">
+  <form class="toolbar" method="get" action="/activities">
+    <input type="text" name="q" placeholder="搜尋活動名稱 / 描述 / 關鍵字" value="{{ q }}" style="min-width: 280px;">
+    <select name="kind">
+      <option value="">所有類型</option>
+      {% for k in ['festival','recharge','pvp','mall','upgrade','boost','version','other'] %}
+        <option value="{{ k }}" {% if kind==k %}selected{% endif %}>{{ k }}</option>
+      {% endfor %}
+    </select>
+    <button>搜尋</button>
+  </form>
+  <p class="muted">最多顯示 500 筆</p>
+
+  <table>
+    <tr><th>日期</th><th>類型</th><th>活動名稱</th><th>時段</th><th>關鍵字</th><th>來源</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.publish_date }}</td>
+      <td><span class="pill">{{ r.kind }}</span></td>
+      <td><b>{{ r.name }}</b>
+          {% if r.description %}<details><summary>說明</summary>{{ r.description }}</details>{% endif %}
+          {% if r.reward %}<details><summary>獎勵</summary>{{ r.reward }}</details>{% endif %}
+      </td>
+      <td class="muted">{{ r.start_dt or '' }}<br>{{ r.end_dt or '' }}</td>
+      <td>{% for k in (r.keywords or '').split(',') %}{% if k %}<span class="pill">{{ k }}</span>{% endif %}{% endfor %}</td>
+      <td><a href="/article/{{ r.article_id }}">#{{ r.article_id }}</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

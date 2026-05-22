@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}儲值贈品歷史{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>💰 歷史儲值贈品紀錄</h2>
+  <table>
+    <tr><th>公告日</th><th>門檻</th><th>贈品</th><th>數量</th><th>活動期間</th><th>原文</th><th>來源</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.publish_date }}</td>
+      <td><b>滿 {{ r.threshold }} 元</b></td>
+      <td>{{ r.gift_name }}</td>
+      <td>{{ r.gift_qty }}</td>
+      <td class="muted">{{ r.period_start or '' }}<br>{{ r.period_end or '' }}</td>
+      <td class="muted">{{ r.raw_text }}</td>
+      <td><a href="/article/{{ r.article_id }}">#{{ r.article_id }}</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

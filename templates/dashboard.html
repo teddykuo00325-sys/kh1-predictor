@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}{% if p.mode == 'rolling' %}滾動視窗預測{% else %}{{ p.target_year }}-{{ '%02d'|format(p.target_month) }} 預測{% endif %}{% endblock %}
+
+{% macro confbar(c) -%}
+  <div class="bar" title="{{ (c*100)|round(0) }}%"><span style="width: {{ (c*100)|round(0) }}%"></span></div>
+{%- endmacro %}
+
+{% block content %}
+<div class="card">
+  {% if p.mode == 'rolling' %}
+  <form class="toolbar" method="get" action="/">
+    <label class="muted">📅 滾動預測範圍：</label>
+    <label class="muted">回看</label>
+    <input type="number" name="back" value="{{ p.look_back }}" min="0" max="180" style="width:70px;"> 天
+    <label class="muted">向前</label>
+    <input type="number" name="ahead" value="{{ p.look_forward }}" min="7" max="180" style="width:70px;"> 天
+    <button type="submit">套用</button>
+    <a href="/?back=14&ahead=45" class="muted" style="padding:6px 10px;">↻ 預設</a>
+    <a href="/?month={{ p.today[:7] }}" class="muted" style="padding:6px 10px;">切換月份模式 →</a>
+    <span class="muted" style="margin-left:auto;">{{ p.generated_at }}</span>
+  </form>
+  <p class="muted" style="margin-top:8px;">今天 <b>{{ p.today }}</b> ｜ 涵蓋範圍 <b>{{ p.window_start }}</b> ~ <b>{{ p.window_end }}</b></p>
+  {% else %}
+  <form class="toolbar" method="get" action="/">
+    <label class="muted">📆 月份模式：</label>
+    <input type="month" name="month" value="{{ p.target_year }}-{{ '%02d'|format(p.target_month) }}">
+    <button type="submit">查詢</button>
+    <a href="/" class="muted" style="padding:6px 10px;">← 切回滾動模式</a>
+    <span class="muted" style="margin-left:auto;">{{ p.generated_at }}</span>
+  </form>
+  {% endif %}
+
+  <div class="kpi">
+    <div><b>{{ p.summary.total_articles }}</b><span>歷史公告數</span></div>
+    <div><b>{{ p.summary.total_activities }}</b><span>活動條目</span></div>
+    <div><b>{{ p.summary.recharge_offers }}</b><span>儲值贈品紀錄</span></div>
+    <div><b>{{ p.summary.version_releases }}</b><span>版本發佈次數</span></div>
+  </div>
+</div>
+
+{% if p.next_version %}
+<div class="card">
+  <h2>🛠 版本更新預測</h2>
+  <p>最近版本：<b>{{ p.next_version.last_version }}</b> @ {{ p.next_version.last_publish_date }}</p>
+  <p>下個版本預估：<b style="color:var(--accent)">{{ p.next_version.predicted_version }}</b> 約 <b>{{ p.next_version.predicted_date }}</b></p>
+  <p class="muted">平均週期 {{ p.next_version.avg_days_between }} 天 / 中位數 {{ p.next_version.median_days_between }} 天 (依最近 {{ p.next_version.releases_observed }} 次發布計算)</p>
+</div>
+{% endif %}
+
+{% macro statusbadge(s) -%}
+  {% if s=='進行中' %}<span class="pill good">🟢 進行中</span>
+  {% elif s=='即將開始' %}<span class="pill warn">🟡 即將開始</span>
+  {% elif s=='近期已結束' %}<span class="pill" style="color:#fb923c;border-color:#5a3a1f;background:#2a1d10;">🟠 近期已結束</span>
+  {% elif s=='已結束' %}<span class="pill">⚪ 已結束</span>
+  {% elif s=='已公告' %}<span class="pill" style="color:#4fb3ff;border-color:#1f3a5a;">🔵 已公告</span>
+  {% elif s=='尚未出現' %}<span class="pill bad">🔴 尚未出現</span>
+  {% else %}<span class="pill">{{ s }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro activity_row(a) -%}
+  <tr>
+    <td>
+      {{ statusbadge(a.current_status) }}
+      {% if a.days_since_end is not none and '已結束' in a.current_status %}
+        <br><span class="muted" style="font-size:11px;">{{ a.days_since_end }} 天前結束</span>
+      {% elif a.days_until_start %}
+        <br><span class="muted" style="font-size:11px;">還有 {{ a.days_until_start }} 天</span>
+      {% endif %}
+    </td>
+    <td><span class="pill">{{ a.kind }}</span></td>
+    <td>
+      <b>{{ a.name_example }}</b>
+      {% if a.current_period %}<br><span class="muted">本年期間：{{ a.current_period }}</span>{% endif %}
+      {% if a.current_article_id %}<br><a href="/article/{{ a.current_article_id }}">→ 來源 #{{ a.current_article_id }}</a>{% endif %}
+    </td>
+    <td>
+      {{ a.years_seen|join(', ') }} <span class="muted">({{ a.occurrences }} 次)</span>
+      <details><summary>歷年範例</summary>
+        <ul style="margin:4px 0;padding-left:18px;">
+        {% for y, ex in a.examples_by_year.items() %}
+          <li>
+            <b>{{ y }}</b> · <a href="/article/{{ ex.article_id }}">{{ ex.publish_date }}</a> · {{ ex.name }}
+            {% if ex.start_dt %}<br><span class="muted">{{ ex.start_dt }} ~ {{ ex.end_dt }}</span>{% endif %}
+          </li>
+        {% endfor %}
+        </ul>
+      </details>
+    </td>
+    <td>
+      {% if a.description_example %}<details><summary>說明</summary>{{ a.description_example }}</details>{% endif %}
+      {% if a.reward_example %}<details><summary>獎勵</summary>{{ a.reward_example }}</details>{% endif %}
+    </td>
+  </tr>
+{%- endmacro %}
+
+{% if p.mode == 'rolling' and p.other_current %}
+<div class="card">
+  <h2>📌 本年其他進行中 / 近期活動 <span class="muted" style="font-weight:normal;font-size:13px;">(不屬於上方任何節日)</span></h2>
+  <table>
+    <tr><th>狀態</th><th>類型</th><th>活動</th><th>期間</th><th>來源</th></tr>
+    {% for o in p.other_current %}
+    <tr>
+      <td>{{ statusbadge(o.status) }}</td>
+      <td><span class="pill">{{ o.kind }}</span></td>
+      <td><b>{{ o.name }}</b></td>
+      <td class="muted">{{ o.start_dt or '' }}<br>{{ o.end_dt or '' }}</td>
+      <td><a href="/article/{{ o.article_id }}">#{{ o.article_id }}</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if p.festival_details %}
+  {% for fd in p.festival_details %}
+  <div class="card">
+    <h2>🏮 {{ fd.festival }}{% if fd.festival_year %} ({{ fd.festival_year }}){% endif %} <span class="muted" style="font-weight:normal;font-size:13px;">@ {{ fd.festival_date }}（視窗 {{ fd.window_start }} ~ {{ fd.window_end }}）</span></h2>
+    <div class="kpi" style="margin-bottom:12px;">
+      <div><b>{{ fd.total_signatures }}</b><span>歷年活動種類</span></div>
+      <div><b style="color:var(--good)">{{ fd.counts.in_progress }}</b><span>進行中</span></div>
+      <div><b style="color:var(--warn)">{{ fd.counts.upcoming }}</b><span>即將開始</span></div>
+      <div><b style="color:#fb923c">{{ fd.counts.recent_ended }}</b><span>近期已結束 (≤60天)</span></div>
+      <div><b>{{ fd.counts.ended }}</b><span>已結束</span></div>
+      <div><b style="color:var(--bad)">{{ fd.counts.missing }}</b><span>歷年有但今年尚未出現</span></div>
+    </div>
+
+    {% if fd.appeared %}
+    <h3 style="font-size:14px;color:var(--good);margin:14px 0 6px;">✅ 本年已出現 ({{ fd.appeared|length }})</h3>
+    <table>
+      <tr><th>狀態</th><th>類型</th><th>活動</th><th>歷年出現</th><th>說明 / 獎勵</th></tr>
+      {% for a in fd.appeared %}{{ activity_row(a) }}{% endfor %}
+    </table>
+    {% endif %}
+
+    {% if fd.missing %}
+    <h3 style="font-size:14px;color:var(--bad);margin:18px 0 6px;">⚠️ 歷年此節有，但 {{ p.target_year }} 年尚未公告 ({{ fd.missing|length }})</h3>
+    <table>
+      <tr><th>狀態</th><th>類型</th><th>活動</th><th>歷年出現</th><th>說明 / 獎勵</th></tr>
+      {% for a in fd.missing %}{{ activity_row(a) }}{% endfor %}
+    </table>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% elif p.mode == 'rolling' %}
+  {% if not p.other_current %}
+  <div class="card"><p class="muted">此時段無對應節日，亦無本年其他活動匹配。可拉長「向前」天數試試。</p></div>
+  {% endif %}
+{% else %}
+  <div class="card"><p class="muted">此月份無對應節日</p></div>
+{% endif %}
+
+<div class="card">
+  <h2>🔁 同月重複活動候選 (≥ 2 年歷史)</h2>
+  {% if not p.recurring_candidates %}
+    <p class="muted">此月份歷年無多年重複的活動</p>
+  {% else %}
+    <table>
+      <tr><th>類型</th><th>活動樣板</th><th>歷年出現</th><th>信心</th><th>最近範例</th></tr>
+      {% for r in p.recurring_candidates %}
+      <tr>
+        <td><span class="pill">{{ r.kind }}</span></td>
+        <td><b>{{ r.signature }}</b></td>
+        <td>{{ r.years_seen|join(', ') }} <span class="muted">({{ r.occurrences }} 次)</span></td>
+        <td style="width:140px;">{{ (r.confidence*100)|round(0) }}%{{ confbar(r.confidence) }}</td>
+        <td>
+          {{ r.name_example }}
+          {% if r.description_example %}<details><summary>說明</summary>{{ r.description_example }}</details>{% endif %}
+          {% if r.reward_example %}<details><summary>獎勵</summary>{{ r.reward_example }}</details>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+</div>
+
+{% if p.weak_candidates %}
+<div class="card">
+  <h2>💡 單年參考活動 <span class="muted" style="font-size:13px;">(僅 1 年出現過，可能不會重複)</span></h2>
+  <details>
+    <summary>展開 {{ p.weak_candidates|length }} 條</summary>
+    <table>
+      <tr><th>類型</th><th>活動</th><th>歷年</th><th>範例說明</th></tr>
+      {% for r in p.weak_candidates %}
+      <tr>
+        <td><span class="pill">{{ r.kind }}</span></td>
+        <td>{{ r.name_example }}</td>
+        <td class="muted">{{ r.years_seen|join(', ') }}</td>
+        <td class="muted">{{ r.description_example[:120] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </details>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>💰 儲值贈品候選</h2>
+  {% if not p.recharge_candidates %}
+    <p class="muted">此月份歷年無儲值贈品紀錄</p>
+  {% else %}
+    <table>
+      <tr><th>門檻</th><th>贈品</th><th>歷年出現</th><th>信心</th><th>原文</th></tr>
+      {% for g in p.recharge_candidates %}
+      <tr>
+        <td><b>滿 {{ g.threshold }} 元</b></td>
+        <td>{{ g.gift_name }} × {{ g.qty_example or 1 }}</td>
+        <td>{{ g.years_seen|join(', ') }} <span class="muted">({{ g.occurrences }} 次)</span></td>
+        <td style="width:140px;">{{ (g.confidence*100)|round(0) }}%{{ confbar(g.confidence) }}</td>
+        <td class="muted">{{ g.raw_text_example }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>📊 月份分佈與熱門關鍵字</h2>
+  <p class="muted">每月平均活動條目數（全部歷史）：</p>
+  <table style="width:auto;">
+    <tr>{% for m, c in p.summary.by_month_count.items() %}<th>{{ m }}月</th>{% endfor %}</tr>
+    <tr>{% for m, c in p.summary.by_month_count.items() %}<td>{{ c }}</td>{% endfor %}</tr>
+  </table>
+  <p class="muted" style="margin-top:16px;">熱門關鍵字 Top 30：</p>
+  <p>{% for kw, n in p.summary.top_keywords %}<span class="pill">{{ kw }} × {{ n }}</span>{% endfor %}</p>
+</div>
+
+{% endblock %}

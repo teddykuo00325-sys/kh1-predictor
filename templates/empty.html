@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}資料準備中{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>⏳ 資料尚未準備好</h2>
+  <p>目前資料庫沒有任何公告資料。可能原因：</p>
+  <ul>
+    <li>首次部署時 build 階段的爬蟲尚未完成，請等待約 5 分鐘後重新整理</li>
+    <li>build 命令未執行，請至 Render Dashboard 確認最近一次部署 log</li>
+    <li>外網連線被擋，請檢查 Render service 是否能存取 <code>kh1.uj.com.tw</code></li>
+  </ul>
+  <p class="muted">手動觸發抓取（需 SSH 或本機執行後重新部署）：</p>
+  <pre>python -m src.scraper
+python -m src.extractor</pre>
+</div>
+{% endblock %}

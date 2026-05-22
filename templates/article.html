@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}#{{ article.id }} {{ article.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>#{{ article.id }} {{ article.title }}</h2>
+  <p class="muted">{{ article.publish_date }} ｜ <a href="{{ article.url }}" target="_blank">官網原文 ↗</a></p>
+</div>
+
+<div class="card">
+  <h2>解析出的活動 ({{ activities|length }})</h2>
+  <table>
+    <tr><th>#</th><th>類型</th><th>名稱</th><th>時段</th><th>說明 / 獎勵</th><th>關鍵字</th></tr>
+    {% for a in activities %}
+    <tr>
+      <td>{{ a.seq }}</td>
+      <td><span class="pill">{{ a.kind }}</span></td>
+      <td><b>{{ a.name }}</b></td>
+      <td class="muted">{{ a.start_dt or '' }}<br>{{ a.end_dt or '' }}</td>
+      <td>
+        {% if a.description %}<details><summary>說明</summary>{{ a.description }}</details>{% endif %}
+        {% if a.reward %}<details><summary>獎勵</summary>{{ a.reward }}</details>{% endif %}
+        {% if a.note %}<details><summary>備註</summary>{{ a.note }}</details>{% endif %}
+      </td>
+      <td>{% for k in (a.keywords or '').split(',') %}{% if k %}<span class="pill">{{ k }}</span>{% endif %}{% endfor %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% if gifts %}
+<div class="card">
+  <h2>儲值贈品條目</h2>
+  <ul>
+    {% for g in gifts %}
+      <li>滿 <b>{{ g.threshold }}</b> 元 → {{ g.gift_name }} × {{ g.gift_qty }} <span class="muted">— {{ g.raw_text }}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>原始公告</h2>
+  <div style="background:#fff; color:#000; padding:14px; border-radius:6px;">
+    {{ body_html|safe }}
+  </div>
+</div>
+{% endblock %}
