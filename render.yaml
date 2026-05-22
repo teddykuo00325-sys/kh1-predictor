@@ -21,3 +21,7 @@ services:
         value: 3.11.9
       - key: PYTHONIOENCODING
         value: utf-8
+      # Set ADMIN_TOKEN in Render Dashboard (Environment tab).  When unset, the
+      # /admin/feedback endpoint returns 404 — admin features stay disabled.
+      - key: ADMIN_TOKEN
+        sync: false

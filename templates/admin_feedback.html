@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}站長 · 意見收件匣{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>📬 意見收件匣 <span class="muted" style="font-size:13px;font-weight:normal;">站長專用</span></h2>
+
+  <div class="kpi">
+    <div><b>{{ counts.ok or 0 }}</b><span>有效留言</span></div>
+    <div><b style="color:var(--bad)">{{ counts.spam or 0 }}</b><span>標記為垃圾</span></div>
+    <div><b>{{ counts.total or 0 }}</b><span>全部</span></div>
+  </div>
+
+  <div class="toolbar" style="margin-top:16px;">
+    {% if show_spam %}
+      <a href="/admin/feedback?key={{ token }}" class="pill">← 隱藏垃圾留言</a>
+    {% else %}
+      <a href="/admin/feedback?key={{ token }}&spam=1" class="pill">顯示垃圾留言</a>
+    {% endif %}
+    <a href="/admin/feedback/export?key={{ token }}" class="pill good">⬇ 匯出 JSON 備份</a>
+    <span class="muted" style="margin-left:auto;font-size:12px;">⚠️ 部署 (rebuild) 會清空留言，請先備份</span>
+  </div>
+</div>
+
+{% if not rows %}
+<div class="card"><p class="muted">目前沒有留言</p></div>
+{% endif %}
+
+{% for r in rows %}
+<div class="card" style="{% if r.is_spam %}opacity:0.55;{% endif %}">
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
+    <b style="font-size:15px;">{{ r.name or '匿名' }}</b>
+    {% if r.contact %}<span class="pill">{{ r.contact }}</span>{% endif %}
+    <span class="muted">{{ r.submitted_at }}</span>
+    <span class="muted" style="font-size:11px;">IP: {{ r.ip or '?' }}</span>
+    {% if r.is_spam %}<span class="pill bad">已標記垃圾</span>{% endif %}
+    <span style="margin-left:auto;display:flex;gap:6px;">
+      {% if r.is_spam %}
+      <form method="post" action="/admin/feedback/{{ r.id }}/spam?key={{ token }}{% if show_spam %}&spam=1{% endif %}" style="display:inline;">
+        <input type="hidden" name="undo" value="1">
+        <button type="submit" class="pill" style="border:none;background:none;cursor:pointer;color:var(--good);">取消標記</button>
+      </form>
+      {% else %}
+      <form method="post" action="/admin/feedback/{{ r.id }}/spam?key={{ token }}" style="display:inline;">
+        <button type="submit" class="pill" style="border:none;background:none;cursor:pointer;color:var(--warn);">標記垃圾</button>
+      </form>
+      {% endif %}
+      <form method="post" action="/admin/feedback/{{ r.id }}/delete?key={{ token }}{% if show_spam %}&spam=1{% endif %}" style="display:inline;" onsubmit="return confirm('永久刪除這則留言？');">
+        <button type="submit" class="pill bad" style="border:none;background:none;cursor:pointer;">🗑 刪除</button>
+      </form>
+    </span>
+  </div>
+  <p style="margin:10px 0 4px;white-space:pre-wrap;">{{ r.message }}</p>
+  {% if r.user_agent %}
+  <details><summary class="muted" style="font-size:11px;">User-Agent</summary>
+    <code style="font-size:11px;color:var(--muted);">{{ r.user_agent }}</code>
+  </details>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

@@ -58,6 +58,18 @@ CREATE TABLE IF NOT EXISTS scrape_state (
     key     TEXT PRIMARY KEY,
     value   TEXT
 );
+
+CREATE TABLE IF NOT EXISTS feedback (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    name         TEXT,                       -- optional display name
+    contact      TEXT,                       -- optional email/discord/etc
+    message      TEXT    NOT NULL,
+    submitted_at TEXT    NOT NULL,
+    ip           TEXT,                       -- truncated (last octet zeroed)
+    user_agent   TEXT,
+    is_spam      INTEGER NOT NULL DEFAULT 0  -- soft-delete / hide flag
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_time ON feedback(submitted_at);
 """
 
 

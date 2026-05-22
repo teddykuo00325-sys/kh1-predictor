@@ -8,9 +8,11 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 
 from . import analyzer, db, predictor
+from .feedback import bp as feedback_bp
 
 ROOT = Path(__file__).resolve().parent.parent
 app = Flask(__name__, template_folder=str(ROOT / "templates"), static_folder=str(ROOT / "static"))
+app.register_blueprint(feedback_bp)
 
 # Ensure schema exists on every cold start, even on a fresh container where
 # build-time scraping somehow didn't run. Predictor pages will simply show

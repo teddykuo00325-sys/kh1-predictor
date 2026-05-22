@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}意見回饋{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>📮 意見回饋</h2>
+  <p class="muted">歡迎留下任何使用建議、發現的錯誤、想看到的新功能。所有意見會由站長親自閱讀，謝謝你的協助！</p>
+
+  {% if error %}
+  <p class="pill bad" style="display:inline-block;">⚠ {{ error }}</p>
+  {% endif %}
+
+  <form method="post" action="/feedback" style="display:flex;flex-direction:column;gap:14px;margin-top:14px;">
+    <label>
+      <span style="display:block;color:var(--muted);font-size:13px;margin-bottom:4px;">稱呼 <span class="muted">(選填)</span></span>
+      <input type="text" name="name" maxlength="80" placeholder="想被怎麼稱呼？"
+              style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;">
+    </label>
+
+    <label>
+      <span style="display:block;color:var(--muted);font-size:13px;margin-bottom:4px;">聯絡方式 <span class="muted">(選填，email / Discord / 等等)</span></span>
+      <input type="text" name="contact" maxlength="120" placeholder="留下方便回覆的聯絡方式"
+              style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;">
+    </label>
+
+    <label>
+      <span style="display:block;color:var(--muted);font-size:13px;margin-bottom:4px;">意見內容 <span style="color:var(--bad)">*</span></span>
+      <textarea name="message" rows="8" maxlength="{{ max_message_len }}" required
+                placeholder="想說的話、發現的問題、建議的功能…"
+                style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:6px;font-family:inherit;line-height:1.55;resize:vertical;"></textarea>
+      <span class="muted" style="font-size:11px;">最多 {{ max_message_len }} 字</span>
+    </label>
+
+    <!-- honeypot — bots fill all fields; legit users never see / touch this -->
+    <input type="text" name="website" tabindex="-1" autocomplete="off"
+            style="position:absolute;left:-10000px;width:1px;height:1px;opacity:0;">
+
+    <div>
+      <button type="submit"
+              style="background:var(--accent);color:#111;border:none;padding:10px 24px;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">
+        送出意見
+      </button>
+      <a href="/" class="muted" style="margin-left:12px;">取消</a>
+    </div>
+  </form>
+
+  <p class="muted" style="margin-top:18px;font-size:12px;">
+    🔒 我們只儲存你的意見內容、稱呼與聯絡方式 (若提供)；IP 位址會去識別化（最後一段以 0 取代）僅作防垃圾用途。
+  </p>
+</div>
+{% endblock %}
