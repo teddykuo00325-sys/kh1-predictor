@@ -1,0 +1,76 @@
+name: Weekly news update + feedback backup
+
+# Fires every Thursday at 11:00 Taipei (=03:00 UTC).
+# 1. Pulls current feedback rows from the running service.
+# 2. Commits them to data/backups/ so the next build can restore them.
+# 3. Triggers a Render rebuild (which re-runs scraper + restore_feedback).
+
+on:
+  schedule:
+    - cron: '0 3 * * 4'         # Thursday 03:00 UTC
+  workflow_dispatch: {}          # let me trigger from the Actions tab any time
+
+# Don't run two updates at once.
+concurrency:
+  group: weekly-update
+  cancel-in-progress: false
+
+permissions:
+  contents: write                # needed to commit the backup file
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull current feedback from production
+        env:
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          set -eu
+          mkdir -p data/backups
+          STAMP=$(date -u +%Y%m%d-%H%M%S)
+          URL="https://kh1-predictor.onrender.com/admin/feedback/export?key=${ADMIN_TOKEN}"
+          # -m 120 covers the cold-start wake of Render's free tier.
+          curl -fsS -m 120 "$URL" -o "data/backups/feedback-${STAMP}.json"
+          cp "data/backups/feedback-${STAMP}.json" data/backups/feedback-latest.json
+          REC_COUNT=$(python -c "import json,sys; print(len(json.load(open('data/backups/feedback-latest.json'))))")
+          echo "Downloaded $REC_COUNT feedback record(s) → feedback-${STAMP}.json"
+          echo "REC_COUNT=$REC_COUNT" >> "$GITHUB_ENV"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+
+      - name: Commit backup if changed
+        id: commit
+        run: |
+          set -eu
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/backups/
+          if git diff --cached --quiet; then
+            echo "No changes — backup identical to last run"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Weekly feedback backup ($REC_COUNT records, $STAMP)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # If we DID commit, Render will auto-deploy from that push.  If we didn't
+      # (nothing new in feedback), explicitly POST the deploy hook so the
+      # weekly news re-scrape still happens.
+      - name: Trigger Render redeploy
+        if: steps.commit.outputs.changed == 'false'
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          set -eu
+          if [ -z "${HOOK:-}" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK_URL secret not set; skipping deploy trigger"
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK" | head -200
