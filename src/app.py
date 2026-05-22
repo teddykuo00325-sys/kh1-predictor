@@ -35,7 +35,10 @@ def healthz():
     return jsonify({
         "ok": True,
         "articles": _article_count(),
-        "version": "1.0",
+        "version": "1.1",
+        # Whether the operator has configured the admin-page token (true/false
+        # only — the actual value is never disclosed).
+        "admin_configured": bool(os.environ.get("ADMIN_TOKEN")),
     })
 
 
