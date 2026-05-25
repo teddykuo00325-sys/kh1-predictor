@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 
-from . import analyzer, db, predictor
+from . import analyzer, backtest, db, predictor
 from .feedback import bp as feedback_bp
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -96,6 +96,17 @@ def activities():
     with db.connect() as conn:
         rows = conn.execute(sql, params).fetchall()
     return render_template("activities.html", rows=rows, kind=kind, q=q)
+
+
+@app.route("/accuracy")
+def accuracy():
+    """Historical backtest results: how often did the predictor's calls come true."""
+    try:
+        min_history = max(2, int(request.args.get("min_history", 2)))
+    except ValueError:
+        min_history = 2
+    report = backtest.run_backtest(min_history_years=min_history)
+    return render_template("accuracy.html", report=report, min_history=min_history)
 
 
 @app.route("/recurring")

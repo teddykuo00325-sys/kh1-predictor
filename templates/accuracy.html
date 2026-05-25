@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}預測準確度回測{% endblock %}
+
+{% macro pctbar(pct, color='var(--accent)') -%}
+  <div class="bar" style="height:10px;">
+    <span style="background:{{ color }};width:{{ pct }}%"></span>
+  </div>
+{%- endmacro %}
+
+{% block content %}
+<div class="card">
+  <h2>🎯 預測準確度 (歷史回測)</h2>
+  <p class="muted">
+    把 2023-2025 的歷史資料當成「當年只能看到過去」來重跑預測流程，再對照「實際發生」的活動，
+    算出系統的命中率。<br>
+    <b>predictioncriteria</b>：只統計**至少在 {{ min_history }} 個過去年都出現過**的活動樣板（與 dashboard「強候選」一致）。
+  </p>
+
+  <div class="kpi">
+    <div>
+      <b style="color:var(--good)">{{ report.overall.precision }}%</b>
+      <span>整體 Precision (命中率)<br>
+        <span style="font-size:11px;">{{ report.overall.hits }} / {{ report.overall.predicted }} 預測命中</span>
+      </span>
+    </div>
+    <div>
+      <b style="color:var(--accent-2)">{{ report.overall.recall }}%</b>
+      <span>整體 Recall (覆蓋率)<br>
+        <span style="font-size:11px;">{{ report.overall.hits }} / {{ report.overall.actual }} 實際命中</span>
+      </span>
+    </div>
+    <div>
+      <b>{{ report.overall.festivals_evaluated }}</b>
+      <span>場次評估數</span>
+    </div>
+    <div>
+      <b style="color:var(--warn)">{{ report.overall.surprises }}</b>
+      <span>意外新活動<br>
+        <span style="font-size:11px;">未預測到但出現的</span>
+      </span>
+    </div>
+  </div>
+
+  <p class="muted" style="font-size:12px;margin-top:14px;">
+    <b>Precision</b>：系統說「會發生」的事情裡有多少真的發生？<br>
+    <b>Recall</b>：實際發生的所有活動裡有多少被系統預測到？<br>
+    這兩者通常彼此拉扯，越嚴格的篩選 precision 越高、recall 越低。
+  </p>
+</div>
+
+<div class="card">
+  <h2>📅 按年份</h2>
+  <table>
+    <tr>
+      <th>年份</th><th>場次</th><th>預測</th><th>命中</th><th>實際</th>
+      <th>Precision</th><th>Recall</th>
+    </tr>
+    {% for y in report.by_year.keys()|sort %}
+    {% set v = report.by_year[y] %}
+    <tr>
+      <td><b>{{ y }}</b></td>
+      <td>{{ v.festivals }}</td>
+      <td>{{ v.predicted }}</td>
+      <td><b style="color:var(--good)">{{ v.hits }}</b></td>
+      <td>{{ v.actual }}</td>
+      <td style="width:140px;">
+        <b>{{ v.precision }}%</b>
+        {{ pctbar(v.precision, 'var(--good)') }}
+      </td>
+      <td style="width:140px;">
+        <b>{{ v.recall }}%</b>
+        {{ pctbar(v.recall, 'var(--accent-2)') }}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>🏮 按節日</h2>
+  <table>
+    <tr>
+      <th>節日</th><th>場次</th><th>預測</th><th>命中</th><th>實際</th>
+      <th>Precision</th>
+    </tr>
+    {% for name, v in report.by_festival.items()|sort(attribute='1.predicted', reverse=true) %}
+      {% if v.predicted > 0 %}
+      <tr>
+        <td><b>{{ name }}</b></td>
+        <td>{{ v.events }}</td>
+        <td>{{ v.predicted }}</td>
+        <td><b style="color:var(--good)">{{ v.hits }}</b></td>
+        <td>{{ v.actual }}</td>
+        <td style="width:160px;">
+          <b>{{ v.precision }}%</b>
+          {{ pctbar(v.precision, 'var(--good)') }}
+        </td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>🔍 細項 (各場次)</h2>
+  <p class="muted">展開看每個節日當年的命中、未命中、意外新活動清單</p>
+  {% for r in report.details %}
+  {% if r.predicted_count > 0 %}
+  <details style="margin:6px 0;padding:8px 12px;background:var(--panel-2);border-radius:6px;">
+    <summary style="cursor:pointer;">
+      <b>{{ r.year }} · {{ r.festival }}</b>
+      @ {{ r.festival_date }}
+      <span class="muted">— 預測 {{ r.predicted_count }} / 命中 {{ r.hits|length }} ({{ ((r.hits|length / r.predicted_count) * 100)|round(0) }}%)</span>
+    </summary>
+    <div style="padding-top:10px;font-size:13px;">
+      {% if r.hits %}<p><b style="color:var(--good)">✅ 預測且命中 ({{ r.hits|length }})</b><br>
+        {% for k in r.hits %}<span class="pill good">{{ k }}</span>{% endfor %}</p>{% endif %}
+      {% if r.misses %}<p><b style="color:var(--bad)">❌ 預測但未發生 ({{ r.misses|length }})</b><br>
+        {% for k in r.misses %}<span class="pill bad">{{ k }}</span>{% endfor %}</p>{% endif %}
+      {% if r.surprises %}<p><b style="color:var(--warn)">⚠️ 意外發生但沒預測到 ({{ r.surprises|length }})</b><br>
+        {% for k in r.surprises %}<span class="pill warn">{{ k }}</span>{% endfor %}</p>{% endif %}
+    </div>
+  </details>
+  {% endif %}
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>📐 方法說明</h2>
+  <p class="muted">
+    對每個 <b>目標年</b> Y 與 <b>節日</b> F：
+  </p>
+  <ol class="muted" style="font-size:13px;">
+    <li><b>資料切片</b>：只看 Y 之前年份的歷史活動（模擬「當年只能用過去資料」）</li>
+    <li><b>預測</b>：列出在 F 節日 ±14 天視窗中、且在 <b>至少 {{ min_history }} 個過去年都出現過</b> 的活動樣板</li>
+    <li><b>實際對照</b>：Y 年 F 節日 ±14 天視窗內實際發生的活動樣板</li>
+    <li><b>計分</b>：交集 = 命中、預測 ∖ 實際 = 預測錯誤、實際 ∖ 預測 = 意外發生</li>
+  </ol>
+</div>
+{% endblock %}

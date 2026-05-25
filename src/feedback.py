@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from flask import (Blueprint, abort, redirect, render_template, request,
                    url_for, jsonify, make_response)
 
-from . import db
+from . import db, notify
 
 bp = Blueprint("feedback", __name__)
 
@@ -90,14 +90,21 @@ def feedback_submit():
 
     # 4) Persist
     ua = (request.headers.get("User-Agent") or "")[:240]
+    submitted_at = datetime.now().isoformat(timespec="seconds")
     with db.cursor() as conn:
         conn.execute(
             "INSERT INTO feedback (name, contact, message, submitted_at, ip, user_agent) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (name or None, contact or None, message,
-             datetime.now().isoformat(timespec="seconds"), ip, ua),
+            (name or None, contact or None, message, submitted_at, ip, ua),
         )
     _LAST_SUBMIT[ip] = now
+
+    # 5) Notify operator on Telegram (best-effort, never blocks the response)
+    notify.send_telegram_async(notify.format_new_feedback({
+        "name": name, "contact": contact, "message": message,
+        "submitted_at": submitted_at, "ip": ip,
+    }))
+
     return redirect(url_for("feedback.feedback_thanks"))
 
 
