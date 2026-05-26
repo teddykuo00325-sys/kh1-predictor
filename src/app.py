@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 
-from . import analyzer, backtest, db, notify, predictor
+from . import analyzer, backtest, db, level_data, notify, predictor
 from .feedback import bp as feedback_bp
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -149,6 +149,56 @@ def recurring():
     return render_template("recurring.html",
                             rows=rows, min_avg=min_avg, min_years=min_years,
                             kind=kind, today=today.isoformat())
+
+
+@app.route("/levels")
+def levels():
+    """Character XP requirements + martial-essence (戰技精隨) lookup."""
+    # XP A->B calculator inputs
+    try:
+        from_lvl = max(1, min(260, int(request.args.get("from", 1))))
+        to_lvl   = max(1, min(260, int(request.args.get("to",   260))))
+    except ValueError:
+        from_lvl, to_lvl = 1, 260
+    if to_lvl < from_lvl:
+        from_lvl, to_lvl = to_lvl, from_lvl
+
+    xp_needed, unknown_levels = level_data.xp_between(from_lvl, to_lvl)
+    cum_total, cum_unknown    = level_data.cumulative_xp_to(260)
+    known_ranges    = level_data.known_level_ranges()
+    missing_ranges  = level_data.missing_level_ranges(260)
+    total_known_xp  = sum(level_data.XP_TO_REACH.values())
+
+    # Full table data (1..260) for the big table
+    table_rows = []
+    cumulative = 0
+    for lvl in range(2, 261):
+        xp = level_data.XP_TO_REACH.get(lvl)
+        if xp is not None:
+            cumulative += xp
+        table_rows.append({
+            "level": lvl,
+            "xp_to_reach": xp,
+            "cumulative_if_known": cumulative if xp is not None else None,
+        })
+
+    # Martial essence — flatten into one row per range
+    essence_total = level_data.total_essence_to_cap()
+
+    return render_template("levels.html",
+        xp_data=level_data.XP_TO_REACH,
+        table_rows=table_rows,
+        known_ranges=known_ranges,
+        missing_ranges=missing_ranges,
+        total_known_xp=total_known_xp,
+        from_lvl=from_lvl, to_lvl=to_lvl,
+        xp_needed=xp_needed, unknown_levels=unknown_levels,
+        essence_ranges=level_data.MARTIAL_ESSENCE_RANGES,
+        essence_total=essence_total,
+        level_cap=level_data.LEVEL_CAP,
+        level_cap_fill_xp=level_data.LEVEL_CAP_FILL_XP,
+        E=100_000_000,
+    )
 
 
 @app.route("/recharge")

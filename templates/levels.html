@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}等級經驗表{% endblock %}
+
+{% macro fmt(n) -%}
+  {%- if n is none -%}
+    <span class="muted">?</span>
+  {%- elif n >= 100000000 -%}
+    {{ (n / 100000000)|round(2) }} 億
+  {%- elif n >= 10000 -%}
+    {{ (n / 10000)|round(1) }} 萬
+  {%- else -%}
+    {{ n }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+<div class="card">
+  <h2>📊 角色等級經驗表 (1 ~ 260 級)</h2>
+  <p class="muted">
+    每一級升級所需經驗值與累計總量。資料逐步累積，未補齊的範圍顯示為「待補」。
+    歡迎透過 <a href="/feedback">意見回饋</a> 提供缺漏值。
+  </p>
+
+  <div class="kpi">
+    <div>
+      <b>{{ xp_data|length }}</b>
+      <span>已知等級數 / 260</span>
+    </div>
+    <div>
+      <b style="color:var(--accent)">{{ fmt(total_known_xp) }}</b>
+      <span>已知資料總和經驗</span>
+    </div>
+    <div>
+      <b style="color:var(--bad)">{{ missing_ranges|length }}</b>
+      <span>未補齊區段數</span>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;display:flex;gap:18px;flex-wrap:wrap;font-size:13px;">
+    <div>
+      <b style="color:var(--good)">✅ 已收錄區段：</b>
+      {% for r in known_ranges %}
+        <span class="pill good">{{ r[0] }} ~ {{ r[1] }}</span>
+      {% endfor %}
+    </div>
+    <div>
+      <b style="color:var(--bad)">⚠️ 待補區段：</b>
+      {% for r in missing_ranges %}
+        <span class="pill bad">{{ r[0] }} ~ {{ r[1] }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ────────────  Calculator  ──────────── -->
+<div class="card">
+  <h2>🧮 經驗計算機 — 從 A 級練到 B 級</h2>
+  <form method="get" action="/levels" class="toolbar" style="align-items:center;">
+    從
+    <input type="number" name="from" value="{{ from_lvl }}" min="1" max="260" style="width:80px;">
+    級 練到
+    <input type="number" name="to" value="{{ to_lvl }}" min="1" max="260" style="width:80px;">
+    級
+    <button type="submit">計算</button>
+    <a href="/levels?from=1&to=260" class="muted" style="padding:6px 10px;">↻ 重設</a>
+  </form>
+
+  <div style="margin-top:14px;background:var(--panel-2);padding:14px 18px;border-radius:8px;">
+    {% if xp_needed > 0 %}
+      <p style="margin:0;font-size:15px;">
+        從 <b>{{ from_lvl }} 級</b> 練到 <b>{{ to_lvl }} 級</b> 需要
+        <b style="color:var(--accent);font-size:20px;">{{ fmt(xp_needed) }}</b> 經驗
+        <span class="muted">({{ "{:,}".format(xp_needed) }})</span>
+      </p>
+      {% if unknown_levels %}
+      <p class="muted" style="margin:8px 0 0;font-size:12px;">
+        ⚠️ 不含以下尚未補齊的等級 ({{ unknown_levels|length }} 個)：
+        {% for l in unknown_levels[:30] %}<span class="pill bad">{{ l }}</span>{% endfor %}
+        {% if unknown_levels|length > 30 %}<span class="muted">... 共 {{ unknown_levels|length }} 級</span>{% endif %}
+      </p>
+      {% else %}
+      <p style="margin:6px 0 0;color:var(--good);font-size:12px;">✓ 此區間資料完整</p>
+      {% endif %}
+    {% else %}
+      <p style="margin:0;" class="muted">A 級 ≥ B 級，沒得算。</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ────────────  Martial Essence Table  ──────────── -->
+<div class="card">
+  <h2>⚔ 戰技精隨升級表 (戰技 1 ~ 100 級)</h2>
+  <p class="muted">每升一級戰技所需精隨數量，依等級區段不同。總共需要 <b style="color:var(--accent)">{{ essence_total }}</b> 顆精隨升至 100 級封頂。</p>
+  <table>
+    <tr>
+      <th>升至區間</th>
+      <th>升級次數</th>
+      <th>每級數量</th>
+      <th>區段小計</th>
+      <th>累計</th>
+    </tr>
+    {% set ns = namespace(cum=0) %}
+    {% for r in essence_ranges %}
+      {% set ns.cum = ns.cum + r.subtotal %}
+      <tr>
+        <td><b>{{ r.level_from }} ~ {{ r.level_to }}</b>{% if r.level_from == r.level_to %} (封頂){% endif %}</td>
+        <td>{{ r.upgrade_count }}</td>
+        <td>{{ r.per_level }}</td>
+        <td><b>{{ r.subtotal }}</b></td>
+        <td class="muted">{{ ns.cum }}</td>
+      </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<!-- ────────────  Full Level Table  ──────────── -->
+<div class="card">
+  <h2>📋 完整等級經驗表 (1 ~ 260)</h2>
+  <p class="muted">每一級升級所需經驗 + 累計總量。已知 {{ xp_data|length }} 筆。</p>
+
+  <table>
+    <tr>
+      <th style="width:80px;">等級</th>
+      <th>升至此等級所需經驗</th>
+      <th>累計經驗 (從 1 級起算)</th>
+    </tr>
+    {% for row in table_rows %}
+    <tr {% if row.xp_to_reach is none %}style="opacity:0.5"{% endif %}>
+      <td><b>{{ row.level }}</b></td>
+      <td>
+        {% if row.xp_to_reach is none %}
+          <span class="muted">待補</span>
+        {% else %}
+          <b>{{ fmt(row.xp_to_reach) }}</b>
+          <span class="muted" style="font-size:11px;margin-left:6px;">({{ "{:,}".format(row.xp_to_reach) }})</span>
+        {% endif %}
+      </td>
+      <td class="muted">
+        {% if row.cumulative_if_known is not none %}{{ fmt(row.cumulative_if_known) }}{% else %}—{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>🔝 滿等之後</h2>
+  <p>角色到達 <b>{{ level_cap }} 級</b> 後不再升級，但 XP 條會繼續累計顯示至 99.9%。
+     填滿這個 99.9% 需要額外 <b style="color:var(--accent)">{{ fmt(level_cap_fill_xp) }}</b> 經驗值
+     <span class="muted">({{ "{:,}".format(level_cap_fill_xp) }})</span>。</p>
+</div>
+
+<div class="card">
+  <h2>📝 如何補資料？</h2>
+  <p class="muted">
+    直接編輯 <code>src/level_data.py</code> 內的 <code>XP_TO_REACH</code> 字典，加入新等級的數值。
+    使用 <code>E(N)</code> helper 把「億」轉成整數，例如 <code>225: E(30)</code> 表示「升 225 級需要 30 億」。
+    Commit + push 後 Render 會自動重建生效。
+  </p>
+</div>
+{% endblock %}
