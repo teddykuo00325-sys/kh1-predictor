@@ -46,7 +46,14 @@ XP_TO_REACH: dict[int, int] = {
     **{lvl: E(12)   for lvl in range(191, 211)},
     # ---- 211-220: 24 億 each ----
     **{lvl: E(24)   for lvl in range(211, 221)},
-    # ---- 221-250: UNKNOWN (TODO fill in) ----
+    # ---- 221-230: UNKNOWN (TODO) ----
+    # ---- 231-236: 等差 +2 億 (起 26 億) ----
+    **{lvl: E(26 + 2 * (lvl - 231)) for lvl in range(231, 237)},
+    # ---- 237-244: 等差 +3 億 (起 39 億) ----
+    **{lvl: E(39 + 3 * (lvl - 237)) for lvl in range(237, 245)},
+    # ---- 245-249: 等差 +4 億 (起 64 億) ----
+    **{lvl: E(64 + 4 * (lvl - 245)) for lvl in range(245, 250)},
+    # ---- 250-251: UNKNOWN (TODO — 估計約 84~88 億) ----
     # ---- 252-260: explicit values ----
     252: E(90),
     253: E(95),
