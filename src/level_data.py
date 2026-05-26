@@ -91,7 +91,10 @@ MARTIAL_ESSENCE_RANGES: list[EssenceRange] = [
     EssenceRange(level_from=100, level_to=100, per_level=60, upgrade_count=1),
 ]
 
-MARTIAL_ESSENCE_CAP = 100   # 戰技封頂等級
+MARTIAL_ESSENCE_CAP = 100         # 戰技封頂等級
+# 站長實測：升到 100 級封頂總共耗用 2740 顆，與下表各段相加（2970）有 230
+# 顆差。差異原因尚待釐清，先以站長提供值為準顯示。
+TOTAL_ESSENCE_TO_CAP_OVERRIDE = 2740
 
 
 # ------------------------------------------------------------------ helpers

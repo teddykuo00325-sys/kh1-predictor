@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}等級經驗表{% endblock %}
+{% block title %}戰技精隨&角色升級經驗表{% endblock %}
 
 {% macro fmt(n) -%}
   {%- if n is none -%}
@@ -15,9 +15,9 @@
 
 {% block content %}
 <div class="card">
-  <h2>📊 角色等級經驗表 (1 ~ 260 級)</h2>
+  <h2>⚔ 戰技精隨 &amp; 角色升級經驗表 (120 ~ 260 級)</h2>
   <p class="muted">
-    每一級升級所需經驗值與累計總量。資料逐步累積，未補齊的範圍顯示為「待補」。
+    每一級升級所需經驗值與累計總量。1-119 級因消耗極少略過不顯示；資料逐步累積，未補齊的範圍顯示為「待補」。
     歡迎透過 <a href="/feedback">意見回饋</a> 提供缺漏值。
   </p>
 
@@ -90,7 +90,13 @@
 <!-- ────────────  Martial Essence Table  ──────────── -->
 <div class="card">
   <h2>⚔ 戰技精隨升級表 (戰技 1 ~ 100 級)</h2>
-  <p class="muted">每升一級戰技所需精隨數量，依等級區段不同。總共需要 <b style="color:var(--accent)">{{ essence_total }}</b> 顆精隨升至 100 級封頂。</p>
+  <p class="muted">
+    每升一級戰技所需精隨數量，依等級區段不同。封頂 100 級實測共需
+    <b style="color:var(--accent)">{{ essence_total }}</b> 顆精隨。
+    {% if essence_total != essence_total_breakdown %}
+    <span style="font-size:11px;">(下表各段相加為 {{ essence_total_breakdown }}，與實測差 {{ essence_total_breakdown - essence_total }} 顆，原因待釐清)</span>
+    {% endif %}
+  </p>
   <table>
     <tr>
       <th>升至區間</th>
@@ -115,8 +121,8 @@
 
 <!-- ────────────  Full Level Table  ──────────── -->
 <div class="card">
-  <h2>📋 完整等級經驗表 (1 ~ 260)</h2>
-  <p class="muted">每一級升級所需經驗 + 累計總量。已知 {{ xp_data|length }} 筆。</p>
+  <h2>📋 角色等級經驗表 (120 ~ 260)</h2>
+  <p class="muted">每一級升級所需經驗 + 累計總量。已知 {{ xp_data|length }} 筆。1-119 級因消耗極少不顯示。</p>
 
   <table>
     <tr>
@@ -125,20 +131,22 @@
       <th>累計經驗 (從 1 級起算)</th>
     </tr>
     {% for row in table_rows %}
-    <tr {% if row.xp_to_reach is none %}style="opacity:0.5"{% endif %}>
-      <td><b>{{ row.level }}</b></td>
-      <td>
-        {% if row.xp_to_reach is none %}
-          <span class="muted">待補</span>
-        {% else %}
-          <b>{{ fmt(row.xp_to_reach) }}</b>
-          <span class="muted" style="font-size:11px;margin-left:6px;">({{ "{:,}".format(row.xp_to_reach) }})</span>
-        {% endif %}
-      </td>
-      <td class="muted">
-        {% if row.cumulative_if_known is not none %}{{ fmt(row.cumulative_if_known) }}{% else %}—{% endif %}
-      </td>
-    </tr>
+      {% if row.level >= 120 %}
+      <tr {% if row.xp_to_reach is none %}style="opacity:0.5"{% endif %}>
+        <td><b>{{ row.level }}</b></td>
+        <td>
+          {% if row.xp_to_reach is none %}
+            <span class="muted">待補</span>
+          {% else %}
+            <b>{{ fmt(row.xp_to_reach) }}</b>
+            <span class="muted" style="font-size:11px;margin-left:6px;">({{ "{:,}".format(row.xp_to_reach) }})</span>
+          {% endif %}
+        </td>
+        <td class="muted">
+          {% if row.cumulative_if_known is not none %}{{ fmt(row.cumulative_if_known) }}{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endif %}
     {% endfor %}
   </table>
 </div>
