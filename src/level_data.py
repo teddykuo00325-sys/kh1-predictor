@@ -34,14 +34,20 @@ def E(n: float) -> int:
 # Levels 181-260 (and a few notes beyond).  Stored as flat dict for explicit
 # coverage; ranges are expanded inline so missing values are obvious.
 XP_TO_REACH: dict[int, int] = {
-    # ---- 181-190: 2億 each ----
+    # ---- 120-150: 等差數列，起 837,400，每級 +16,900 ----
+    **{lvl: 837_400 + 16_900 * (lvl - 120) for lvl in range(120, 151)},
+    # ---- 151-165: 等差數列，起 1,941,300，每級 +596,900 ----
+    **{lvl: 1_941_300 + 596_900 * (lvl - 151) for lvl in range(151, 166)},
+    # ---- 166-180: 等差數列，起 16,114,800，每級 +5,816,900 ----
+    **{lvl: 16_114_800 + 5_816_900 * (lvl - 166) for lvl in range(166, 181)},
+    # ---- 181-190: 2 億 each ----
     **{lvl: E(2)    for lvl in range(181, 191)},
-    # ---- 191-210: 12億 each ----
+    # ---- 191-210: 12 億 each ----
     **{lvl: E(12)   for lvl in range(191, 211)},
-    # ---- 211-220: 24億 each ----
+    # ---- 211-220: 24 億 each ----
     **{lvl: E(24)   for lvl in range(211, 221)},
     # ---- 221-250: UNKNOWN (TODO fill in) ----
-    # ---- 251-260: explicit values ----
+    # ---- 252-260: explicit values ----
     252: E(90),
     253: E(95),
     254: E(100),
