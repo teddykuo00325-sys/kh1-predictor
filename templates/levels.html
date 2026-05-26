@@ -91,12 +91,21 @@
 <div class="card">
   <h2>⚔ 戰技精隨升級表 (戰技 1 ~ 100 級)</h2>
   <p class="muted">
-    每升一級戰技所需精隨數量，依等級區段不同。封頂 100 級實測共需
-    <b style="color:var(--accent)">{{ essence_total }}</b> 顆精隨。
-    {% if essence_total != essence_total_breakdown %}
-    <span style="font-size:11px;">(下表各段相加為 {{ essence_total_breakdown }}，與實測差 {{ essence_total_breakdown - essence_total }} 顆，原因待釐清)</span>
-    {% endif %}
+    封頂 100 級總共需要 <b style="color:var(--accent)">{{ essence_total }}</b> 顆精隨。
   </p>
+  <div style="background:var(--panel-2);padding:10px 14px;border-radius:6px;margin:10px 0;font-size:13px;">
+    🧮 <b>公式</b>：升級成本 = <code>floor(當前等級 ÷ 10) × 5 + 5</code><br>
+    <span class="muted">特例：</span>
+    <span class="pill">1 → 2 免費</span>
+    <span class="pill">100 級封頂不消耗</span>
+    <br>
+    <span class="muted" style="font-size:12px;">已知校驗點：
+      30→31 = 20 ✓ ｜
+      35→36 = 20 ✓ ｜
+      46→47 = 25 ✓ ｜
+      85→86 = 45 ✓
+    </span>
+  </div>
   <table>
     <tr>
       <th>升至區間</th>

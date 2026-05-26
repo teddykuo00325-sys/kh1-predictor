@@ -71,39 +71,57 @@ LEVEL_CAP_FILL_XP = E(141)      # 滿等後填到 99.9% 顯示所需的內部 XP
 
 
 # ------------------------------------------------------------------ 戰技精隨
+# 公式 (十位數分界制)
+# ───────────────────
+#   升級成本 = floor(current_level / 10) × 5 + 5     (對 level >= 2)
+#   特例：level 1 → 2 免費  (cost 0)
+#   特例：level 100 為封頂   (cost 0)
+#
+# 已知校驗點：
+#   30 級 → 31: floor(30/10)*5+5 = 20 ✓
+#   35 級 → 36: floor(35/10)*5+5 = 20 ✓
+#   46 級 → 47: floor(46/10)*5+5 = 25 ✓
+#   85 級 → 86: floor(85/10)*5+5 = 45 ✓
+# 全部 1→100 總成本 = 2,740 顆 ✓ (與站長實測一致)
+
+
+def essence_cost_to_upgrade(current_level: int) -> int:
+    """Cost in essence to upgrade FROM `current_level` to `current_level + 1`."""
+    if current_level < 1 or current_level >= 100:
+        return 0
+    if current_level == 1:
+        return 0                       # 1 → 2 免費
+    return (current_level // 10) * 5 + 5
+
+
 @dataclass(frozen=True)
 class EssenceRange:
-    level_from:   int      # 升至這個等級開始
-    level_to:     int      # 升至這個等級結束 (含)
-    per_level:    int      # 每升一級需幾顆戰技精隨
-    upgrade_count: int     # 此區間共幾次升級
+    level_from:   int        # 當前等級下限 (含)
+    level_to:     int        # 當前等級上限 (含)
+    per_level:    int        # 升一級所需精隨
+    upgrade_count: int       # 此區段中實際發生的升級次數
 
     @property
     def subtotal(self) -> int:
         return self.per_level * self.upgrade_count
 
 
+# Tens-digit-based ranges (level 1-9 has 8 paid upgrades because 1→2 is free).
 MARTIAL_ESSENCE_RANGES: list[EssenceRange] = [
-    EssenceRange(level_from=2,   level_to=5,   per_level=5,  upgrade_count=4),   # 1->5
-    EssenceRange(level_from=6,   level_to=15,  per_level=10, upgrade_count=10),
-    EssenceRange(level_from=16,  level_to=25,  per_level=15, upgrade_count=10),
-    EssenceRange(level_from=26,  level_to=35,  per_level=20, upgrade_count=10),
-    EssenceRange(level_from=36,  level_to=46,  per_level=25, upgrade_count=11),  # 注意：11 次
-    EssenceRange(level_from=47,  level_to=56,  per_level=30, upgrade_count=10),
-    EssenceRange(level_from=57,  level_to=66,  per_level=35, upgrade_count=10),
-    EssenceRange(level_from=67,  level_to=76,  per_level=40, upgrade_count=10),
-    EssenceRange(level_from=77,  level_to=86,  per_level=45, upgrade_count=10),
-    EssenceRange(level_from=87,  level_to=96,  per_level=50, upgrade_count=10),
-    EssenceRange(level_from=97,  level_to=99,  per_level=55, upgrade_count=3),
-    EssenceRange(level_from=100, level_to=100, per_level=60, upgrade_count=1),
+    EssenceRange(level_from=1,  level_to=9,  per_level=5,  upgrade_count=8),   # 1→2 免費
+    EssenceRange(level_from=10, level_to=19, per_level=10, upgrade_count=10),
+    EssenceRange(level_from=20, level_to=29, per_level=15, upgrade_count=10),
+    EssenceRange(level_from=30, level_to=39, per_level=20, upgrade_count=10),
+    EssenceRange(level_from=40, level_to=49, per_level=25, upgrade_count=10),
+    EssenceRange(level_from=50, level_to=59, per_level=30, upgrade_count=10),
+    EssenceRange(level_from=60, level_to=69, per_level=35, upgrade_count=10),
+    EssenceRange(level_from=70, level_to=79, per_level=40, upgrade_count=10),
+    EssenceRange(level_from=80, level_to=89, per_level=45, upgrade_count=10),
+    EssenceRange(level_from=90, level_to=99, per_level=50, upgrade_count=10),
 ]
 
-MARTIAL_ESSENCE_CAP = 100         # 戰技封頂等級
-# 站長一度認為 2740 顆封頂，但稽核後發現該數字湊不出來：
-#   - 原始版本 (36-46 = 11 次, 97-99 + 100 兩列) → 2970，完全連續無矛盾
-#   - 修正版本 (覆蓋 66/76/86 跳號, 96-100 = 5 次) → 2995
-#   - 2740 與兩者均不符
-# 暫以「明細各段加總」為顯示總和。若日後找到原始 2740 來源再調。
+MARTIAL_ESSENCE_CAP = 100               # 戰技封頂等級 (不消耗精隨)
+# 不再需要 override — 範圍表的算術總和本身就是 2740。
 TOTAL_ESSENCE_TO_CAP_OVERRIDE: int | None = None
 
 
@@ -172,16 +190,8 @@ def missing_level_ranges(max_level: int = 260) -> list[tuple[int, int]]:
 
 
 def essence_for_level(level: int) -> int:
-    """How many martial-essence stones to reach the given martial-skill level."""
-    cost = 0
-    for r in MARTIAL_ESSENCE_RANGES:
-        if level >= r.level_to:
-            cost += r.subtotal
-        elif level >= r.level_from:
-            n = level - r.level_from + 1
-            cost += n * r.per_level
-            break
-    return cost
+    """Total essence to reach the given martial-skill level (from level 1)."""
+    return sum(essence_cost_to_upgrade(L) for L in range(1, level))
 
 
 def essence_between(from_level: int, to_level: int) -> int:
