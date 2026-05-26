@@ -93,6 +93,64 @@
   </tr>
 {%- endmacro %}
 
+{% if p.curated_patterns %}
+<div class="card">
+  <h2>🎯 站長長期追蹤 Pattern</h2>
+  <p class="muted">這些是基於多年觀察的長期規律，獨立於演算法自動偵測。距離越近的會排在前面。</p>
+  <div class="grid">
+    {% for cp in p.curated_patterns %}
+    <div style="background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:14px;">
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
+        <b style="font-size:15px;">{{ cp.title }}</b>
+        <span class="pill">{{ cp.kind }}</span>
+        {% if cp.status == '處於預期視窗' %}
+          <span class="pill good">🎯 {{ cp.status }}</span>
+        {% else %}
+          <span class="pill">⏳ {{ cp.status }}</span>
+        {% endif %}
+      </div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0;">
+        信心度 <b>{{ (cp.confidence * 100)|round(0) }}%</b> ｜ {{ cp.source }}
+      </p>
+      <p style="margin:10px 0;font-size:13px;line-height:1.6;">{{ cp.description }}</p>
+
+      <div style="background:var(--panel);padding:8px 12px;border-radius:6px;margin:8px 0;">
+        <div class="muted" style="font-size:11px;">下次預期視窗</div>
+        <b>{{ cp.next_window_start }} ~ {{ cp.next_window_end }}</b>
+        <span class="muted" style="margin-left:8px;font-size:12px;">
+          (錨點 {{ cp.next_anchor_date }} ·
+          {% if cp.days_until_anchor >= 0 %}還有 {{ cp.days_until_anchor }} 天{% else %}已過 {{ -cp.days_until_anchor }} 天{% endif %})
+        </span>
+      </div>
+
+      {% if cp.expected_signals %}
+      <details>
+        <summary class="muted" style="font-size:12px;cursor:pointer;">預期信號 (新公告含這些關鍵字就可能是這個 pattern)</summary>
+        <div style="margin-top:6px;">
+          {% for sig in cp.expected_signals %}<span class="pill" style="font-size:11px;">{{ sig }}</span>{% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+      {% if cp.historical_evidence %}
+      <details>
+        <summary class="muted" style="font-size:12px;cursor:pointer;">歷史佐證 ({{ cp.historical_evidence|length }} 筆)</summary>
+        <ul style="margin:6px 0;padding-left:18px;font-size:12px;line-height:1.55;">
+          {% for e in cp.historical_evidence %}
+          <li>
+            <b>{{ e.year }}</b> · <a href="/article/{{ e.article_id }}">#{{ e.article_id }}</a><br>
+            <span class="muted">{{ e.note }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% if p.mode == 'rolling' and p.other_current %}
 <div class="card">
   <h2>📌 本年其他進行中 / 近期活動 <span class="muted" style="font-weight:normal;font-size:13px;">(不屬於上方任何節日)</span></h2>

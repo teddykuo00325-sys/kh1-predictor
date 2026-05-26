@@ -30,7 +30,7 @@ from datetime import date, datetime, timedelta
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from . import analyzer, festivals
+from . import analyzer, curated_patterns, festivals
 from .analyzer import tokenize
 from .cache import ttl_cache
 
@@ -684,6 +684,7 @@ def _predict_rolling_cached(today: date, look_back: int, look_forward: int) -> d
 
     version = predict_next_version()
     summary = analyzer.summarize()
+    curated = curated_patterns.relevant_patterns(today)
 
     return {
         "mode": "rolling",
@@ -696,6 +697,7 @@ def _predict_rolling_cached(today: date, look_back: int, look_forward: int) -> d
         "other_current": other_current,
         "recharge_candidates": recharge,
         "next_version": version,
+        "curated_patterns": curated,
         "summary": summary,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }
