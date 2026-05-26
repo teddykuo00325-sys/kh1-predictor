@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 
-from . import analyzer, backtest, db, predictor
+from . import analyzer, backtest, db, notify, predictor
 from .feedback import bp as feedback_bp
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,10 +35,30 @@ def healthz():
     return jsonify({
         "ok": True,
         "articles": _article_count(),
-        "version": "1.1",
-        # Whether the operator has configured the admin-page token (true/false
-        # only — the actual value is never disclosed).
+        "version": "1.2",
+        # Capability flags — booleans only, real values stay secret.
         "admin_configured": bool(os.environ.get("ADMIN_TOKEN")),
+        "telegram_configured": notify.configured(),
+    })
+
+
+@app.route("/admin/test-telegram")
+def admin_test_telegram():
+    """Token-protected diagnostic: synchronously POST a test message via the
+    server's notify module and return the raw outcome.  Reveals exactly why
+    Telegram isn't pushing (env vars missing / 401 / DNS error / etc)."""
+    token = os.environ.get("ADMIN_TOKEN", "")
+    provided = request.args.get("key") or ""
+    import hmac
+    if not token or not provided or not hmac.compare_digest(provided, token):
+        return jsonify({"error": "not found"}), 404
+    ok, info = notify.send_telegram(
+        "🧪 <b>診斷測試</b>\n如果你收到此訊息，代表 production 容器可以正常呼叫 Telegram API。"
+    )
+    return jsonify({
+        "telegram_configured": notify.configured(),
+        "ok": ok,
+        "info": info,
     })
 
 

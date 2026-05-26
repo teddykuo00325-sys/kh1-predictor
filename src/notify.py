@@ -18,56 +18,62 @@ from __future__ import annotations
 import os
 import sys
 import textwrap
-import threading
 import urllib.parse
-import urllib.request
+
+import requests
 
 
 TELEGRAM_API = "https://api.telegram.org"
 TIMEOUT_SECONDS = 8
 
 
-def _post(url: str, data: bytes) -> tuple[int, bytes]:
-    req = urllib.request.Request(
-        url, data=data,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-        return resp.status, resp.read()
+def configured() -> bool:
+    """True if both env vars are populated."""
+    return bool(os.environ.get("TG_BOT_TOKEN", "").strip()
+                 and os.environ.get("TG_CHAT_ID", "").strip())
 
 
 def send_telegram(text: str, *, parse_mode: str = "HTML",
-                   disable_web_page_preview: bool = True) -> bool:
-    """Send a message to TG_CHAT_ID using TG_BOT_TOKEN.  Returns True on success.
+                   disable_web_page_preview: bool = True) -> tuple[bool, str]:
+    """Send a message to TG_CHAT_ID using TG_BOT_TOKEN.
 
-    Silently returns False (no exception) if env vars are missing or the API
-    call fails — we never want a Telegram outage to break the public site.
+    Returns (ok, info) — info is the API response body on success or the
+    error reason on failure.  Never raises so production stays alive.
     """
     token   = os.environ.get("TG_BOT_TOKEN", "").strip()
     chat_id = os.environ.get("TG_CHAT_ID",   "").strip()
     if not token or not chat_id:
-        return False
-
-    body = urllib.parse.urlencode({
-        "chat_id": chat_id,
-        "text":    text[:4000],          # Telegram caps at 4096 chars
-        "parse_mode": parse_mode,
-        "disable_web_page_preview": "true" if disable_web_page_preview else "false",
-    }).encode("utf-8")
+        return False, "TG_BOT_TOKEN or TG_CHAT_ID not set"
 
     try:
-        status, payload = _post(f"{TELEGRAM_API}/bot{token}/sendMessage", body)
-        return status == 200
+        r = requests.post(
+            f"{TELEGRAM_API}/bot{token}/sendMessage",
+            data={
+                "chat_id": chat_id,
+                "text":    text[:4000],
+                "parse_mode": parse_mode,
+                "disable_web_page_preview": "true" if disable_web_page_preview else "false",
+            },
+            timeout=TIMEOUT_SECONDS,
+        )
+        if r.status_code == 200:
+            return True, r.text[:240]
+        return False, f"HTTP {r.status_code}: {r.text[:240]}"
     except Exception as e:
-        print(f"[notify] telegram send failed: {e}", file=sys.stderr)
-        return False
+        msg = f"{e.__class__.__name__}: {e}"
+        print(f"[notify] telegram send failed: {msg}", file=sys.stderr)
+        return False, msg
 
 
 def send_telegram_async(text: str) -> None:
-    """Fire-and-forget Telegram send on a background thread.  Useful in HTTP
-    handlers where we don't want to block the response on a flaky network call.
+    """Currently runs synchronously (renamed for callers' expectations).
+
+    A previous version used a daemon thread, but gunicorn's request-thread
+    reaper kills daemon threads as soon as the worker goes idle, dropping
+    Telegram messages.  ≤8 sec extra latency on /feedback POST is acceptable
+    in exchange for guaranteed delivery.
     """
-    threading.Thread(target=send_telegram, args=(text,), daemon=True).start()
+    send_telegram(text)
 
 
 def html_escape(s: str | None) -> str:
