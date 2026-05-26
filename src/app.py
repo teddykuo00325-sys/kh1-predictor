@@ -184,7 +184,7 @@ def levels():
 
     # Martial essence — flatten into one row per range
     essence_total_breakdown = level_data.total_essence_to_cap()
-    essence_total = level_data.TOTAL_ESSENCE_TO_CAP_OVERRIDE
+    essence_total = level_data.TOTAL_ESSENCE_TO_CAP_OVERRIDE or essence_total_breakdown
 
     return render_template("levels.html",
         xp_data=level_data.XP_TO_REACH,
