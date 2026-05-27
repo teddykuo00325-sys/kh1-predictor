@@ -75,9 +75,15 @@ https://kh1-predictor.onrender.com
 - Render Dashboard → 你的服務 → 右上 **Manual Deploy** → **Clear build cache & deploy**
 - 約 7-10 分鐘後新資料生效
 
-### 2. 第一次造訪很慢
-- 免費方案無人使用 15 分鐘會休眠，下次造訪要重新啟動 (~30 秒)
-- 若要避免休眠：可用 https://cron-job.org 設定每 14 分鐘 ping 一次 `/healthz`（合法且免費）
+### 2. 第一次造訪很慢 (冷啟動)
+- 免費方案無人使用 15 分鐘會休眠，下次造訪要重新啟動（實測 ~40 秒）
+- ⚠️ **GitHub Actions cron 不適合保溫**：實測 `*/10` 排程在低流量 repo 上
+  實際每 1-4 小時才跑一次，遠超 15 分鐘休眠閾值，無法有效保溫。
+  （`.github/workflows/keepalive.yml` 已停用自動排程，僅保留手動觸發。）
+- 若要真正避免休眠，用**外部 uptime 監控**（精準按間隔打）：
+  - https://cron-job.org — 免費、最短 1 分鐘、設 `/healthz` 每 10 分鐘
+  - https://uptimerobot.com — 免費 50 監控、最短 5 分鐘
+- 本專案目前選擇**接受冷啟動**（訪客少、約 2 個月才改版一次）
 
 ### 3. 看到「資料準備中」頁面
 - 表示 build 階段的爬蟲還沒跑完或失敗
