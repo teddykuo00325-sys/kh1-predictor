@@ -165,6 +165,23 @@ def levels():
 
     xp_needed, unknown_levels = level_data.xp_between(from_lvl, to_lvl)
     cum_total, cum_unknown    = level_data.cumulative_xp_to(260)
+
+    # Leveling-time calculator: XP per hour → time breakdown
+    try:
+        xp_per_hour = int(request.args.get("xph", 0))
+    except ValueError:
+        xp_per_hour = 0
+    time_estimate = None
+    if xp_per_hour > 0 and xp_needed > 0:
+        total_hours = xp_needed / xp_per_hour
+        time_estimate = {
+            "xp_per_hour": xp_per_hour,
+            "total_hours": total_hours,
+            "days_24h": total_hours / 24,
+            "days_12h": total_hours / 12,
+            "days_8h":  total_hours / 8,
+            "days_4h":  total_hours / 4,
+        }
     known_ranges    = level_data.known_level_ranges()
     missing_ranges  = level_data.missing_level_ranges(260)
     total_known_xp  = sum(level_data.XP_TO_REACH.values())
@@ -194,6 +211,7 @@ def levels():
         total_known_xp=total_known_xp,
         from_lvl=from_lvl, to_lvl=to_lvl,
         xp_needed=xp_needed, unknown_levels=unknown_levels,
+        time_estimate=time_estimate,
         essence_ranges=level_data.MARTIAL_ESSENCE_RANGES,
         essence_total=essence_total,
         essence_total_breakdown=essence_total_breakdown,

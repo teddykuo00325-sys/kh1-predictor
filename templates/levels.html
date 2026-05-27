@@ -54,16 +54,21 @@
 
 <!-- ────────────  Calculator  ──────────── -->
 <div class="card">
-  <h2>🧮 經驗計算機 — 從 A 級練到 B 級</h2>
-  <form method="get" action="/levels" class="toolbar" style="align-items:center;">
+  <h2>🧮 經驗 & 練等時數計算機</h2>
+  <form method="get" action="/levels" class="toolbar" style="align-items:center;flex-wrap:wrap;">
     從
-    <input type="number" name="from" value="{{ from_lvl }}" min="1" max="260" style="width:80px;">
+    <input type="number" name="from" value="{{ from_lvl }}" min="1" max="260" style="width:75px;">
     級 練到
-    <input type="number" name="to" value="{{ to_lvl }}" min="1" max="260" style="width:80px;">
+    <input type="number" name="to" value="{{ to_lvl }}" min="1" max="260" style="width:75px;">
     級
+    <span style="margin:0 8px;color:var(--border);">|</span>
+    每小時經驗
+    <input type="number" name="xph" value="{{ time_estimate.xp_per_hour if time_estimate else 35000000 }}"
+           min="1" step="1000000" style="width:130px;" placeholder="例 35000000">
     <button type="submit">計算</button>
     <a href="/levels?from=1&to=260" class="muted" style="padding:6px 10px;">↻ 重設</a>
   </form>
+  <p class="muted" style="font-size:11px;margin:4px 0 0;">提示：3500 萬 = 35000000；可填預估打怪/活動時的每小時經驗。</p>
 
   <div style="margin-top:14px;background:var(--panel-2);padding:14px 18px;border-radius:8px;">
     {% if xp_needed > 0 %}
@@ -80,6 +85,24 @@
       </p>
       {% else %}
       <p style="margin:6px 0 0;color:var(--good);font-size:12px;">✓ 此區間資料完整</p>
+      {% endif %}
+
+      {% if time_estimate %}
+      <hr style="border:none;border-top:1px solid var(--border);margin:14px 0;">
+      <p style="margin:0 0 8px;font-size:14px;">
+        以每小時 <b style="color:var(--accent-2)">{{ "{:,}".format(time_estimate.xp_per_hour) }}</b> 經驗計算：
+        共需 <b style="color:var(--accent);font-size:18px;">{{ time_estimate.total_hours|round(0)|int }}</b> 小時
+      </p>
+      <table style="width:auto;">
+        <tr><th>練功強度</th><th>需要天數</th></tr>
+        <tr><td>24 小時 / 天 (全天掛機)</td><td><b>{{ time_estimate.days_24h|round(1) }}</b> 天</td></tr>
+        <tr><td>12 小時 / 天</td><td><b>{{ time_estimate.days_12h|round(1) }}</b> 天</td></tr>
+        <tr><td>8 小時 / 天</td><td><b>{{ time_estimate.days_8h|round(1) }}</b> 天 ({{ (time_estimate.days_8h/30)|round(1) }} 個月)</td></tr>
+        <tr><td>4 小時 / 天</td><td><b>{{ time_estimate.days_4h|round(1) }}</b> 天 ({{ (time_estimate.days_4h/30)|round(1) }} 個月)</td></tr>
+      </table>
+      {% if unknown_levels %}
+      <p class="muted" style="font-size:11px;margin:8px 0 0;">※ 時數未包含上方待補等級，實際會更久。</p>
+      {% endif %}
       {% endif %}
     {% else %}
       <p style="margin:0;" class="muted">A 級 ≥ B 級，沒得算。</p>
