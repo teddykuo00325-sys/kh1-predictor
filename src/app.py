@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 
-from . import analyzer, backtest, db, level_data, notify, predictor
+from . import analyzer, backtest, daily_tasks, db, level_data, notify, predictor
 from .feedback import bp as feedback_bp
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -149,6 +149,16 @@ def recurring():
     return render_template("recurring.html",
                             rows=rows, min_avg=min_avg, min_years=min_years,
                             kind=kind, today=today.isoformat())
+
+
+@app.route("/daily")
+def daily():
+    """每日任務執行清單 — 常駐 + 當前活動限定."""
+    today = date.today()
+    buckets = daily_tasks.tasks_for(today)
+    return render_template("daily.html",
+                            today=today.isoformat(),
+                            buckets=buckets)
 
 
 @app.route("/levels")

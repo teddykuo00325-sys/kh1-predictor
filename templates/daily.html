@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}每日任務 {{ today }}{% endblock %}
+
+{% macro task_row(t) -%}
+<div class="daily-task" data-task-id="{{ t.id }}">
+  <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);margin-bottom:8px;">
+    <input type="checkbox" class="task-cb" onchange="toggleTask(this, '{{ t.id }}')"
+           style="margin-top:4px;width:18px;height:18px;cursor:pointer;flex-shrink:0;">
+    <div style="flex:1;min-width:0;">
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
+        <b class="task-title" style="font-size:14px;">{{ t.title }}</b>
+        {% if t.category == 'event' %}<span class="pill warn" style="font-size:10px;">活動限定</span>{% endif %}
+        {% if t.category == 'weekly' %}<span class="pill" style="font-size:10px;">每週</span>{% endif %}
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:4px;line-height:1.6;">
+        {% if t.where %}<span>📍 {{ t.where }}</span>{% endif %}
+        {% if t.time_rule %} ｜ <span>⏰ {{ t.time_rule }}</span>{% endif %}
+      </div>
+      {% if t.reward %}<div class="muted" style="font-size:12px;margin-top:2px;">🎁 {{ t.reward }}</div>{% endif %}
+      {% if t.note %}<div class="muted" style="font-size:11px;margin-top:4px;font-style:italic;">※ {{ t.note }}</div>{% endif %}
+      {% if t.active_from or t.active_until %}
+      <div class="muted" style="font-size:11px;margin-top:4px;">
+        🗓 {{ t.active_from or '不限' }} ~ {{ t.active_until or '不限' }}
+      </div>
+      {% endif %}
+    </div>
+  </label>
+</div>
+{%- endmacro %}
+
+{% block content %}
+<style>
+.daily-task.done > label { opacity: 0.45; background: var(--panel); }
+.daily-task.done .task-title { text-decoration: line-through; }
+.daily-task > label:hover { border-color: var(--accent); }
+.progress-bar { height: 8px; background: var(--border); border-radius: 4px; overflow:hidden; margin-top: 8px; }
+.progress-bar > span { display:block; height:100%; background: linear-gradient(90deg,var(--good),var(--accent)); transition: width 0.3s; }
+</style>
+
+<div class="card">
+  <h2>📋 每日任務 — {{ today }}</h2>
+  <p class="muted">
+    今日該做的事情清單，勾選會記在你的瀏覽器（隔日自動重置）。
+    任務內容由站長維護，活動結束後會自動隱藏。
+  </p>
+  <div style="margin-top:14px;">
+    <div style="display:flex;justify-content:space-between;font-size:13px;">
+      <span>今日完成度</span>
+      <span><b id="progress-count">0</b> / <b id="progress-total">0</b></span>
+    </div>
+    <div class="progress-bar"><span id="progress-fill" style="width:0%"></span></div>
+  </div>
+</div>
+
+{% if buckets.core %}
+<div class="card">
+  <h2>🔁 常駐每日</h2>
+  {% for t in buckets.core %}{{ task_row(t) }}{% endfor %}
+</div>
+{% endif %}
+
+{% if buckets.active %}
+<div class="card">
+  <h2>🎯 進行中活動 (期間限定)</h2>
+  {% for t in buckets.active %}{{ task_row(t) }}{% endfor %}
+</div>
+{% endif %}
+
+{% if buckets.upcoming %}
+<div class="card">
+  <h2>⏳ 即將開始 (14 天內)</h2>
+  <p class="muted">這些活動還沒開檔，先預告以便規劃時間。</p>
+  {% for t in buckets.upcoming %}{{ task_row(t) }}{% endfor %}
+</div>
+{% endif %}
+
+{% if buckets.recently_ended %}
+<div class="card">
+  <h2>⚪ 近期結束 (7 天內)</h2>
+  <p class="muted">剛結束的活動，僅供回顧。</p>
+  {% for t in buckets.recently_ended %}{{ task_row(t) }}{% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>📝 如何維護任務清單？</h2>
+  <p class="muted">
+    編輯 <code>src/daily_tasks.py</code>，在 <code>EVENT_TASKS</code> append 新任務即可。
+    <code>active_from</code> / <code>active_until</code> 設定起訖日期，過期自動隱藏。
+    每筆 task 必須有穩定的 <code>id</code> — 玩家勾選狀態用 id 記在 localStorage。
+  </p>
+</div>
+
+<script>
+const TODAY = "{{ today }}";
+const STORAGE_KEY = "kh1_daily_done_" + TODAY;
+
+function readDone() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch { return []; }
+}
+function writeDone(arr) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+function toggleTask(checkbox, taskId) {
+  let done = readDone();
+  if (checkbox.checked) {
+    if (!done.includes(taskId)) done.push(taskId);
+  } else {
+    done = done.filter(x => x !== taskId);
+  }
+  writeDone(done);
+  applyState();
+}
+
+function applyState() {
+  const done = new Set(readDone());
+  document.querySelectorAll(".daily-task").forEach(el => {
+    const id = el.getAttribute("data-task-id");
+    const cb = el.querySelector(".task-cb");
+    if (done.has(id)) {
+      cb.checked = true;
+      el.classList.add("done");
+    } else {
+      cb.checked = false;
+      el.classList.remove("done");
+    }
+  });
+  // progress
+  const total = document.querySelectorAll(".daily-task").length;
+  const completed = document.querySelectorAll(".daily-task.done").length;
+  document.getElementById("progress-count").textContent = completed;
+  document.getElementById("progress-total").textContent = total;
+  document.getElementById("progress-fill").style.width = (total ? (completed / total * 100) : 0) + "%";
+}
+
+// Clean up old day-state keys (keep last 3 days only)
+function cleanupOldKeys() {
+  const cutoffIdx = (new Date(TODAY).getTime() - 3 * 86400 * 1000);
+  Object.keys(localStorage).forEach(k => {
+    if (!k.startsWith("kh1_daily_done_")) return;
+    if (k === STORAGE_KEY) return;
+    const d = k.slice("kh1_daily_done_".length);
+    if (new Date(d).getTime() < cutoffIdx) localStorage.removeItem(k);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  cleanupOldKeys();
+  applyState();
+});
+</script>
+{% endblock %}
