@@ -7,7 +7,8 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 
-from . import analyzer, backtest, daily_tasks, db, level_data, notify, predictor
+from . import (analyzer, backtest, daily_tasks, db, dress_strategy,
+                level_data, notify, predictor)
 from .feedback import bp as feedback_bp
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -149,6 +150,31 @@ def recurring():
     return render_template("recurring.html",
                             rows=rows, min_avg=min_avg, min_years=min_years,
                             kind=kind, today=today.isoformat())
+
+
+@app.route("/dress-strategy")
+def dress_strategy_page():
+    """扮裝加持策略 — +1~+20 道具使用對照與 SOP."""
+    # Per-item current-level calculator
+    item_levels: list[int] = []
+    next_steps: list[dict] = []
+    for i in range(1, 7):
+        try:
+            lv = int(request.args.get(f"item{i}", 0))
+        except ValueError:
+            lv = 0
+        lv = max(0, min(20, lv))
+        item_levels.append(lv)
+        next_steps.append(dress_strategy.next_step_for(lv))
+    return render_template("dress_strategy.html",
+        policies=dress_strategy.POLICIES,
+        stages=dress_strategy.STAGES,
+        never_use=dress_strategy.NEVER_USE,
+        purchase_plan=dress_strategy.PURCHASE_PLAN,
+        sop=dress_strategy.SOP,
+        item_levels=item_levels,
+        next_steps=next_steps,
+    )
 
 
 @app.route("/daily")

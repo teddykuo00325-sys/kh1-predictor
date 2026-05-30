@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}扮裝加持策略{% endblock %}
+
+{% macro item(label) -%}
+  {% if label == '加持' %}<span class="pill good">✅ {{ label }}</span>
+  {% elif label == '祝福' %}<span class="pill" style="color:#4fb3ff;border-color:#1f3a5a;">💎 {{ label }}</span>
+  {% elif label == '特殊保護' %}<span class="pill warn">🛡 {{ label }}</span>
+  {% elif label == '特殊修復' %}<span class="pill bad">🔧 {{ label }}</span>
+  {% else %}<span class="pill">{{ label }}</span>{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<style>
+  .toc a { display:inline-block; margin: 0 8px 4px 0; padding: 4px 10px;
+           background: var(--panel-2); border-radius:6px; text-decoration:none; font-size:13px;}
+  .toc a:hover { background: var(--border); color: var(--accent); }
+  .strategy-table th, .strategy-table td { padding: 6px 8px; text-align:center; font-size:13px;}
+  .strategy-table th { background: var(--panel-2); }
+  .checkbox-yes { color: var(--good); font-weight:bold; }
+  .checkbox-on-fail { color: var(--warn); font-size:11px;}
+  .checkbox-no { color: var(--muted); }
+  .stage-box { padding: 12px 16px; background: var(--panel-2); border-radius:8px;
+               border-left: 4px solid var(--accent); margin-bottom:12px;}
+</style>
+
+<div class="card">
+  <h2>⚔ 扮裝加持策略</h2>
+  <p class="muted">從 +1 到 +20 該用哪些道具、什麼時候用、為什麼這樣選 — 站長實戰整理。</p>
+  <div class="toc">
+    <b>跳到：</b>
+    <a href="#calc">下一步建議</a>
+    <a href="#table">道具對照表</a>
+    <a href="#flow">階段判斷流程</a>
+    <a href="#why">每階段理由</a>
+    <a href="#never">永不使用</a>
+    <a href="#sop">實戰 SOP</a>
+    <a href="#buy">採購時機</a>
+    <a href="#tldr">總結貼紙</a>
+  </div>
+</div>
+
+<!-- ──────────── 計算機 ──────────── -->
+<div class="card" id="calc">
+  <h2>🧮 各件扮裝目前等級 → 下一步建議</h2>
+  <p class="muted">輸入 6 件扮裝目前各 + 幾，系統告訴你下一步該用哪些道具。</p>
+  <form method="get" action="/dress-strategy#calc" class="toolbar" style="flex-wrap:wrap;">
+    {% for i in range(6) %}
+      <label>
+        <span class="muted" style="font-size:12px;">件{{ i+1 }}:</span>
+        <input type="number" name="item{{ i+1 }}" value="{{ item_levels[i] }}"
+                min="0" max="20" style="width:60px;">
+      </label>
+    {% endfor %}
+    <button type="submit">分析</button>
+    <a href="/dress-strategy" class="muted" style="padding:6px 10px;">↻ 重設</a>
+  </form>
+
+  <table style="margin-top:12px;">
+    <tr><th>件</th><th>目前</th><th>下一步</th><th>需用道具</th><th>失敗時</th><th>策略</th></tr>
+    {% for ns in next_steps %}
+      {% set i = loop.index0 %}
+      <tr>
+        <td><b>{{ i + 1 }}</b></td>
+        <td>+{{ item_levels[i] }}</td>
+        {% if ns.status == 'done' %}
+          <td colspan="4" style="color:var(--good);"><b>✓ {{ ns.message }}</b></td>
+        {% elif ns.status == 'unknown' or not ns.policy %}
+          <td colspan="4" class="muted">—</td>
+        {% else %}
+          <td><b style="color:var(--accent)">+{{ ns.target }}</b></td>
+          <td>{% for u in ns.use_before %}{{ item(u) }}{% endfor %}</td>
+          <td>{% if ns.use_on_fail %}{% for u in ns.use_on_fail %}{{ item(u) }}{% endfor %}{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td class="muted" style="font-size:12px;">{{ ns.rationale }}</td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<!-- ──────────── 一、道具對照表 ──────────── -->
+<div class="card" id="table">
+  <h2>一、各等級道具使用對照</h2>
+  <table class="strategy-table">
+    <tr>
+      <th>目標等級</th>
+      <th>加持</th>
+      <th>祝福</th>
+      <th>保護</th>
+      <th>特殊保護</th>
+      <th>修復</th>
+      <th>特殊修復</th>
+    </tr>
+    {% for p in policies %}
+    <tr>
+      <td><b>+{{ p.target_level }}</b></td>
+      <td>{% if p.add %}<span class="checkbox-yes">✅</span>{% else %}<span class="checkbox-no">—</span>{% endif %}</td>
+      <td>{% if p.bless %}<span class="checkbox-yes">✅</span>{% else %}<span class="checkbox-no">—</span>{% endif %}</td>
+      <td>{% if p.protect %}<span class="checkbox-yes">✅</span>{% else %}<span class="checkbox-no">—</span>{% endif %}</td>
+      <td>{% if p.special_protect %}<span class="checkbox-yes">✅</span>{% else %}<span class="checkbox-no">—</span>{% endif %}</td>
+      <td>{% if p.repair == 'on_fail' %}<span class="checkbox-on-fail">💔→用</span>{% else %}<span class="checkbox-no">—</span>{% endif %}</td>
+      <td>{% if p.special_repair == 'on_fail' %}<span class="checkbox-on-fail">💔→用</span>{% else %}<span class="checkbox-no">—</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted" style="font-size:12px;margin-top:8px;">
+    圖例：<span class="checkbox-yes">✅</span> = 嘗試前必用 ｜
+    <span class="checkbox-on-fail">💔→用</span> = 失敗破壞時才用 ｜
+    <span class="checkbox-no">—</span> = 不用
+  </p>
+</div>
+
+<!-- ──────────── 二、流程圖 ──────────── -->
+<div class="card" id="flow">
+  <h2>二、三種狀態的判斷流程</h2>
+  <pre style="background:var(--panel-2);padding:14px;border-radius:8px;font-family:'Consolas','Microsoft JhengHei',monospace;line-height:1.6;font-size:13px;overflow-x:auto;">
+                  哪一階？
+                     │
+       ┌─────────────┼─────────────┐
+       │             │             │
+    +1~+3        +4~+10         +11~+12
+   只加持       只加持           加持+祝福
+                  ↓
+            失敗就破壞？
+            ↓        ↓
+           Yes      No
+            ↓        ↓
+       特殊修復    繼續打
+
+       ┌─────────────┼─────────────┐
+       │                           │
+    +13~+19                       +20
+   加持+祝福                 加持+祝福+特殊保護
+       ↓                           ↓
+   失敗破壞？                失敗也不掉等
+       ↓
+   特殊修復
+  </pre>
+</div>
+
+<!-- ──────────── 三、每階段理由 ──────────── -->
+<div class="card" id="why">
+  <h2>三、為什麼每個階段這樣選？</h2>
+  {% for s in stages %}
+  <div class="stage-box">
+    <b style="color:var(--accent);">{{ s.name }}</b>
+    {% for u in s.use_before %}{{ item(u) }}{% endfor %}
+    {% if s.use_on_fail %}
+      <span class="muted" style="margin-left:8px;">→ 失敗時:</span>
+      {% for u in s.use_on_fail %}{{ item(u) }}{% endfor %}
+    {% endif %}
+    <div class="muted" style="margin-top:6px;font-size:13px;">{{ s.rationale }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ──────────── 四、永遠不用 ──────────── -->
+<div class="card" id="never">
+  <h2>四、永遠不用的兩個道具</h2>
+  <table>
+    <tr><th>道具</th><th>市場價</th><th>為什麼不用</th></tr>
+    {% for x in never_use %}
+    <tr>
+      <td><b style="color:var(--bad);">❌ {{ x.name }}</b></td>
+      <td>{{ x.cost }}</td>
+      <td class="muted">{{ x.reason }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<!-- ──────────── 五、實戰 SOP ──────────── -->
+<div class="card" id="sop">
+  <h2>五、實戰操作 SOP</h2>
+  {% for s in sop %}
+  <div class="stage-box">
+    <b style="font-size:14px;color:var(--accent);">{{ s.phase }}</b>
+    <div style="margin-top:8px;font-size:13px;line-height:1.7;">
+      <b class="muted">流程：</b> {{ s.flow }}<br>
+      <b class="muted">預估道具：</b> {{ s.estimate }}<br>
+      <b class="muted">策略：</b> {{ s.strategy }}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ──────────── 六、採購時機 ──────────── -->
+<div class="card" id="buy">
+  <h2>六、組合包採購時機 (避免囤太多)</h2>
+  <table>
+    <tr>
+      <th>階段</th>
+      <th>累計用特殊保護</th>
+      <th>累計用特殊修復</th>
+      <th>該階段購買</th>
+      <th>備註</th>
+    </tr>
+    {% for p in purchase_plan %}
+    <tr>
+      <td><b>{{ p.phase }}</b></td>
+      <td>{{ p.cum_special_protect }}</td>
+      <td>{{ p.cum_special_repair }}</td>
+      <td><b style="color:var(--accent);">{{ p.buy_now }} 組</b></td>
+      <td class="muted">{{ p.note }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted" style="font-size:12px;margin-top:8px;">
+    💡 採購規律：階段 1 買 2 組 → 階段 2 買 5 組 → 階段 3 買 1 組，
+    共 <b>8 組</b>剛好用完。
+  </p>
+</div>
+
+<!-- ──────────── 七、總結貼紙 ──────────── -->
+<div class="card" id="tldr">
+  <h2>七、總結貼紙 (可截圖隨身)</h2>
+  <pre style="background:linear-gradient(135deg,#1a1f29,#2a2317);padding:20px;border-radius:10px;border:1px dashed var(--accent);font-family:'Consolas','Microsoft JhengHei',monospace;line-height:1.7;font-size:14px;text-align:center;">
+═══════════════════════════════
+   <b style="color:var(--good)">+1 ~ +3</b>   ：加持
+   <b style="color:var(--good)">+4 ~ +10</b>  ：加持　(壞→特殊修復)
+   <b style="color:var(--accent-2)">+11 ~ +12</b> ：加持 + 祝福
+   <b style="color:var(--accent-2)">+13 ~ +19</b> ：加持 + 祝福 (壞→特殊修復)
+   <b style="color:var(--warn)">+20</b>       ：加持 + 祝福 + 特殊保護
+═══════════════════════════════
+   ❌ <b style="color:var(--bad)">普通保護</b> 永遠不買
+   ❌ <b style="color:var(--bad)">普通修復</b> 永遠不用
+═══════════════════════════════
+  </pre>
+</div>
+{% endblock %}
