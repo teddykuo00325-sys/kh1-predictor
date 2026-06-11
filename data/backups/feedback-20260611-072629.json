@@ -1,0 +1,12 @@
+[
+  {
+    "id": 1,
+    "name": "restore-finalcheck",
+    "contact": "final",
+    "message": "最終測試。若 rebuild 後仍可見此訊息，整鏈路正常。",
+    "submitted_at": "2026-05-22T18:11:52",
+    "ip": "180.218.17.0",
+    "user_agent": "python-requests/2.33.1",
+    "is_spam": 0
+  }
+]
