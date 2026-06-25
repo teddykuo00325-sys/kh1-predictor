@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}福袋分析 - {{ box.name }}{% endblock %}
+
+{% macro money(n) -%}
+  {% if n is none %}<span class="muted">—</span>
+  {% elif n >= 10000 %}{{ (n / 10000)|round(1) }} 萬
+  {% else %}{{ "{:,.0f}".format(n) }}{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<div class="card">
+  <h2>🎁 福袋期望值分析</h2>
+  {% if all_boxes|length > 1 %}
+  <div class="toolbar" style="margin-bottom:8px;">
+    <span class="muted">切換福袋：</span>
+    {% for b in all_boxes %}
+      <a href="/lootbox/{{ b.id }}" class="pill {% if b.id == box.id %}good{% endif %}">{{ b.name }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <h3 style="color:var(--accent);margin:0;">{{ box.name }}</h3>
+  <p class="muted" style="font-size:12px;margin:4px 0 0;">
+    機率總和：{{ (prob_sum * 100)|round(0) }}%
+    {% if prob_sum < 0.999 or prob_sum > 1.001 %}
+      <span class="pill bad">⚠ 機率總和不是 100%，請檢查資料</span>
+    {% else %}
+      <span class="pill good">✓ 機率合法</span>
+    {% endif %}
+  </p>
+</div>
+
+<!-- ────────────  Reward table & EV  ──────────── -->
+<div class="card">
+  <h2>一、機率表 & 每抽期望值</h2>
+  <table>
+    <tr>
+      <th>道具</th>
+      <th style="text-align:right;">機率</th>
+      <th style="text-align:right;">星值換算</th>
+      <th style="text-align:right;">期望貢獻</th>
+    </tr>
+    {% for r in rewards %}
+    <tr>
+      <td>
+        {% if r.name == box.main_prize_name %}
+          <b style="color:var(--accent);">🏆 {{ r.name }}</b>
+        {% else %}{{ r.name }}{% endif %}
+      </td>
+      <td style="text-align:right;">{{ r.prob_pct }}%</td>
+      <td style="text-align:right;">{{ "{:,}".format(r.star_value) }} 星</td>
+      <td style="text-align:right;"><b>{{ r.ev_contribution|round(2) }} 星</b></td>
+    </tr>
+    {% endfor %}
+    <tr style="background:var(--panel-2);font-weight:bold;">
+      <td colspan="3" style="text-align:right;">每抽 EV =</td>
+      <td style="text-align:right;color:var(--accent);font-size:16px;">{{ ev|round(1) }} 星</td>
+    </tr>
+  </table>
+  <p class="muted" style="font-size:12px;margin-top:8px;">
+    💡 <b>{{ box.main_prize_name }}</b> 視為 {{ "{:,}".format(box.main_prize_alt_value) }} {{ box.main_prize_alt_unit }} 等值（可用此數量兌換）
+  </p>
+</div>
+
+<!-- ────────────  Channel comparison  ──────────── -->
+<div class="card">
+  <h2>二、通路比較</h2>
+  <table>
+    <tr>
+      <th>通路</th>
+      <th style="text-align:right;">單抽價</th>
+      <th style="text-align:right;">每元換得星</th>
+      <th style="text-align:right;">「直接中」需抽數</th>
+      <th style="text-align:right;">每本書淨成本</th>
+    </tr>
+    {% for c in channels %}
+    {% set is_best = loop.last and c.net_cost_per_prize < channels[0].net_cost_per_prize %}
+    <tr {% if is_best or (c.discount_note and 'best' not in c) %}style="background:var(--panel-2);"{% endif %}>
+      <td><b>{{ c.channel }}</b>{% if c.discount_note %} <span class="pill warn">{{ c.discount_note }}</span>{% endif %}</td>
+      <td style="text-align:right;">{{ c.price }} 元</td>
+      <td style="text-align:right;">{{ c.stars_per_money|round(2) }} 星/元</td>
+      <td style="text-align:right;">
+        {{ c.draws_for_one_direct_hit|round(1) }} 抽
+        <span class="muted" style="font-size:11px;">({{ (c.draws_for_one_direct_hit * c.price)|round(0)|int }} 元)</span>
+      </td>
+      <td style="text-align:right;">
+        <b style="color:var(--accent);">{{ "{:,}".format(c.net_cost_per_prize|round(0)|int) }} 元</b>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% set cheapest = channels|sort(attribute='net_cost_per_prize')|first %}
+  <p style="margin-top:10px;color:var(--good);">
+    ⭐ 最划算：<b>{{ cheapest.channel }}</b>（每本淨成本 {{ "{:,}".format(cheapest.net_cost_per_prize|round(0)|int) }} 元）
+  </p>
+</div>
+
+<!-- ────────────  Why not naive calc?  ──────────── -->
+<div class="card">
+  <h2>三、為什麼不是 1/機率 × 單價？</h2>
+  <p class="muted">很多人會直覺算「100 抽才中一本，所以 1 本 = 5,000 元」，但這忽略了「過程中累積的星星」：</p>
+  {% set demo_price = channels[0].price %}
+  {% set main_prob = box.rewards|selectattr('name', 'equalto', box.main_prize_name)|first %}
+  {% set draws_for_one = (1 / main_prob.prob)|round(0)|int %}
+  {% set total_money = draws_for_one * demo_price %}
+  {% set side_stars_per_draw = ev - main_prob.prob * box.main_prize_alt_value %}
+  {% set side_stars_total = side_stars_per_draw * (draws_for_one - 1) %}
+  {% set extra_books = side_stars_total / box.main_prize_alt_value %}
+  {% set total_books = 1 + extra_books %}
+  {% set net = total_money / total_books %}
+  <pre style="background:var(--panel-2);padding:14px;border-radius:8px;font-family:'Consolas','Microsoft JhengHei',monospace;line-height:1.7;font-size:13px;overflow-x:auto;">
+開 {{ draws_for_one }} 抽 ({{ "{:,}".format(total_money) }} 元):
+  ┌─ 期望抽到 <b style="color:var(--good)">1 本 {{ box.main_prize_name }}</b> (價值 {{ box.main_prize_alt_value }} 星)
+  └─ 期望累積 <b style="color:var(--accent-2)">{{ side_stars_total|round(0)|int }} 星</b> (從其他 {{ draws_for_one - 1 }} 個非中獎袋)
+    ↓
+  {{ side_stars_total|round(0)|int }} 星 / {{ box.main_prize_alt_value }} 星 = <b>{{ extra_books|round(2) }} 本「換」來的書</b>
+    ↓
+  {{ draws_for_one }} 抽總共 = 1 + {{ extra_books|round(2) }} = <b style="color:var(--accent)">{{ total_books|round(2) }} 本書</b>
+    ↓
+  每本平均 = {{ "{:,}".format(total_money) }} / {{ total_books|round(2) }} ≈ <b style="color:var(--accent);">{{ "{:,}".format(net|round(0)|int) }} 元</b>
+  </pre>
+</div>
+
+<!-- ────────────  Calculator  ──────────── -->
+<div class="card">
+  <h2>四、🧮 目標本數計算機</h2>
+  <form method="get" action="/lootbox/{{ box.id }}" class="toolbar" style="align-items:center;">
+    我想取得
+    <input type="number" name="target" value="{{ target_count }}" min="1" max="99" style="width:70px;">
+    本 {{ box.main_prize_name }}，通路選
+    <select name="channel">
+      {% for c in box.purchase_channels %}
+      <option value="{{ c.label }}" {% if c.label == channel_for_calc %}selected{% endif %}>{{ c.label }} ({{ c.price }} 元)</option>
+      {% endfor %}
+    </select>
+    <button type="submit">計算</button>
+  </form>
+
+  {% if target_result %}
+  <div style="margin-top:14px;background:var(--panel-2);padding:16px 20px;border-radius:8px;">
+    <p style="margin:0;font-size:15px;">
+      <b>{{ target_result.target_count }} 本</b> {{ box.main_prize_name }}（{{ target_result.channel }} 通路）：
+    </p>
+    <table style="margin-top:10px;">
+      <tr><td>預估抽數</td><td><b>{{ target_result.total_draws|round(0)|int }} 抽</b></td></tr>
+      <tr><td>預估花費</td><td><b style="color:var(--accent);font-size:18px;">{{ "{:,}".format(target_result.total_cost_money|round(0)|int) }} 元</b></td></tr>
+      <tr>
+        <td>對比「直接中」算法</td>
+        <td>
+          直接中需 {{ target_result.direct_hit_draws|round(0)|int }} 抽
+          = {{ "{:,}".format((target_result.direct_hit_draws * target_result.price_per_draw)|round(0)|int) }} 元
+          <br>
+          <span style="color:var(--good);">省下 {{ "{:,}".format(target_result.savings_vs_direct_hit_money|round(0)|int) }} 元</span>
+        </td>
+      </tr>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ────────────  Notes  ──────────── -->
+{% if box.notes %}
+<div class="card">
+  <h2>📝 備註</h2>
+  <ul>
+    {% for n in box.notes %}<li class="muted">{{ n }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<!-- ────────────  ⚠ 風險提醒  ──────────── -->
+<div class="card" style="border-color:var(--warn);">
+  <h2>⚠ 期望值的真實意義</h2>
+  <p class="muted" style="font-size:13px;line-height:1.7;">
+    本頁計算的是「<b>長期 / 大樣本平均</b>」成本 — 假設你抽夠多次，每本平均花費會收斂到上述數字。
+    <b>單次運氣完全可能高於或低於</b>：你可能 50 抽就中、也可能 200 抽都沒中。
+    EV 只反映機率設計的<b>合理性下限</b>，不保證個人結果。
+    <br><br>
+    💸 <b>練功花錢前請評估自己負擔範圍</b>。福袋本質是賭博性遊戲機制，預算之內當娛樂、超過就請停手。
+  </p>
+</div>
+{% endblock %}

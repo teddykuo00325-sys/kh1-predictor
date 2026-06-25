@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 
 from . import (analyzer, backtest, daily_tasks, db, dress_strategy,
-                level_data, notify, predictor)
+                level_data, lootbox_data, notify, predictor)
 from .feedback import bp as feedback_bp
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -150,6 +150,34 @@ def recurring():
     return render_template("recurring.html",
                             rows=rows, min_avg=min_avg, min_years=min_years,
                             kind=kind, today=today.isoformat())
+
+
+@app.route("/lootbox")
+@app.route("/lootbox/<box_id>")
+def lootbox_page(box_id: str = ""):
+    """福袋期望值分析."""
+    box_id = box_id or (lootbox_data.LOOTBOXES[0].id if lootbox_data.LOOTBOXES else "")
+    box = lootbox_data.get_box(box_id)
+    if not box:
+        return redirect(url_for("lootbox_page"))
+
+    try:
+        target_count = max(1, min(99, int(request.args.get("target", 1))))
+    except ValueError:
+        target_count = 1
+    channel_for_calc = request.args.get("channel", box.purchase_channels[0].label)
+
+    return render_template("lootbox.html",
+        all_boxes=lootbox_data.LOOTBOXES,
+        box=box,
+        rewards=lootbox_data.reward_breakdown(box),
+        ev=lootbox_data.total_ev_per_draw(box),
+        prob_sum=lootbox_data.prob_sum(box),
+        channels=lootbox_data.channel_analysis(box),
+        target_count=target_count,
+        channel_for_calc=channel_for_calc,
+        target_result=lootbox_data.calc_for_target(box, channel_for_calc, target_count),
+    )
 
 
 @app.route("/dress-strategy")
