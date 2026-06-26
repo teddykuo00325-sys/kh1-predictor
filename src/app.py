@@ -176,9 +176,14 @@ def lootbox_page(box_id: str = ""):
         obs_stars = int(request.args.get("obs_stars", 0))
     except ValueError:
         obs_stars = 0
+    try:
+        obs_books = int(request.args.get("obs_books", 0))
+    except ValueError:
+        obs_books = 0
     obs_analysis = None
     if obs_draws > 0 and obs_stars >= 0:
-        obs_analysis = lootbox_data.analyze_observation(box, obs_draws, obs_stars)
+        obs_analysis = lootbox_data.analyze_observation(box, obs_draws, obs_stars, obs_books)
+    cumulative = lootbox_data.cumulative_observation(box)
 
     return render_template("lootbox.html",
         all_boxes=lootbox_data.LOOTBOXES,
@@ -193,7 +198,9 @@ def lootbox_page(box_id: str = ""):
         target_result=lootbox_data.calc_for_target(box, channel_for_calc, target_count),
         obs_draws=obs_draws,
         obs_stars=obs_stars,
+        obs_books=obs_books,
         obs_analysis=obs_analysis,
+        cumulative=cumulative,
     )
 
 

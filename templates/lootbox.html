@@ -166,12 +166,15 @@
     （表示單抽星數分布的散布度）。
   </p>
 
-  <form method="get" action="/lootbox/{{ box.id }}#實測" class="toolbar" style="align-items:center;">
+  <form method="get" action="/lootbox/{{ box.id }}#實測" class="toolbar" style="align-items:center;flex-wrap:wrap;">
     我開了
     <input type="number" name="obs_draws" value="{{ obs_draws or 20 }}" min="1" max="999" style="width:80px;">
-    抽，總共獲得
+    抽，獲得
     <input type="number" name="obs_stars" value="{{ obs_stars or '' }}" min="0" style="width:100px;" placeholder="星數">
-    顆 {{ box.main_prize_alt_unit }}
+    顆星
+    +
+    <input type="number" name="obs_books" value="{{ obs_books or 0 }}" min="0" max="99" style="width:60px;">
+    本 {{ box.main_prize_name }}
     <button type="submit">分析</button>
     {% if obs_analysis %}<a href="/lootbox/{{ box.id }}" class="muted" style="padding:6px 10px;">↻ 清除</a>{% endif %}
   </form>
@@ -179,7 +182,8 @@
   {% if obs_analysis %}
   <div id="實測" style="margin-top:14px;background:var(--panel-2);padding:16px 20px;border-radius:8px;">
     <p style="margin:0 0 10px;font-size:15px;">
-      <b>{{ obs_analysis.draws }} 抽 → {{ obs_analysis.observed_stars }} 星</b>
+      <b>{{ obs_analysis.draws }} 抽 → {{ obs_analysis.observed_stars }} 星
+      {% if obs_analysis.main_prize_count %}+ {{ obs_analysis.main_prize_count }} 本書 = 等值 {{ obs_analysis.effective_stars }} 星{% endif %}</b>
       （期望 {{ obs_analysis.expected_stars|round(0)|int }} 星，
       實際 / 期望 =
       <b style="color:{% if obs_analysis.ratio_vs_ev < 0.7 %}var(--bad){% elif obs_analysis.ratio_vs_ev < 0.9 %}var(--warn){% elif obs_analysis.ratio_vs_ev > 1.1 %}var(--good){% else %}var(--muted){% endif %};">
@@ -251,17 +255,19 @@
 {% if box.observed_samples %}
 <div class="card">
   <h2>六、📋 已記錄的實測樣本</h2>
-  <p class="muted">站長 / 玩家提供的真實開包紀錄。樣本越多，越能驗證機率公告是否準確。</p>
+  <p class="muted">站長 / 玩家提供的真實開包紀錄。樣本累積越多，越能驗證機率公告是否準確。</p>
   <table>
-    <tr><th>日期</th><th>抽數</th><th>實得星數</th><th>vs EV</th><th>備註</th></tr>
+    <tr><th>日期</th><th>抽數</th><th>星</th><th>本書</th><th>等值星</th><th>vs EV</th><th>備註</th></tr>
     {% for s in box.observed_samples %}
-    {% set actual = s.total_stars %}
+    {% set effective = s.total_stars + s.main_prize_count * box.main_prize_alt_value %}
     {% set expected = (s.draws * ev) %}
-    {% set ratio = (actual / expected * 100)|round(0) if expected > 0 else 0 %}
+    {% set ratio = (effective / expected * 100)|round(0) if expected > 0 else 0 %}
     <tr>
       <td>{{ s.date }}</td>
       <td>{{ s.draws }}</td>
       <td>{{ s.total_stars }}</td>
+      <td>{{ s.main_prize_count }}</td>
+      <td><b>{{ effective }}</b></td>
       <td>
         <b style="color:{% if ratio < 70 %}var(--bad){% elif ratio < 90 %}var(--warn){% elif ratio > 110 %}var(--good){% else %}var(--muted){% endif %};">
           {{ ratio }}%
@@ -270,9 +276,26 @@
       <td class="muted" style="font-size:12px;">{{ s.note }}</td>
     </tr>
     {% endfor %}
+    {% if cumulative %}
+    <tr style="background:var(--panel-2);font-weight:bold;border-top:2px solid var(--accent);">
+      <td>累計</td>
+      <td>{{ cumulative.draws }}</td>
+      <td>{{ cumulative.observed_stars }}</td>
+      <td>{{ cumulative.main_prize_count }}</td>
+      <td><b style="color:var(--accent);">{{ cumulative.effective_stars }}</b></td>
+      <td>
+        <b style="color:{% if cumulative.ratio_vs_ev < 0.7 %}var(--bad){% elif cumulative.ratio_vs_ev < 0.9 %}var(--warn){% elif cumulative.ratio_vs_ev > 1.1 %}var(--good){% else %}var(--muted){% endif %};">
+          {{ (cumulative.ratio_vs_ev * 100)|round(0) }}%
+        </b>
+      </td>
+      <td class="muted" style="font-size:12px;">
+        z = {{ cumulative.z_score|round(2) }} σ ｜ P(這麼差或更差) = {{ cumulative.p_lower_pct|round(1) }}%
+      </td>
+    </tr>
+    {% endif %}
   </table>
   <p class="muted" style="font-size:11px;margin-top:8px;">
-    💡 想要新增你自己的紀錄？到 <a href="/feedback">意見回饋</a> 留言告知抽數 + 星數，站長會匯入。
+    💡 想要新增你自己的紀錄？到 <a href="/feedback">意見回饋</a> 留言告知抽數 + 星數 + 中本書數，站長會匯入。
   </p>
 </div>
 {% endif %}

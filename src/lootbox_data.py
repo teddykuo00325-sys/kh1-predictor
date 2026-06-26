@@ -24,10 +24,15 @@ class PurchaseChannel:
 
 @dataclass
 class ObservedSample:
-    draws: int              # 實際開了幾包
-    total_stars: int        # 實際拿到多少星
-    date: str = ""          # YYYY-MM-DD
-    note: str = ""          # 補充
+    draws: int                 # 實際開了幾包
+    total_stars: int           # 實際拿到星數 (不含 main_prize 等值)
+    main_prize_count: int = 0  # 同期間中了幾本 main prize
+    date: str = ""             # YYYY-MM-DD
+    note: str = ""             # 補充
+
+    def effective_stars(self, main_prize_alt_value: int) -> int:
+        """加總「等值星數」（含主獎品兌換價值）."""
+        return self.total_stars + self.main_prize_count * main_prize_alt_value
 
 
 @dataclass
@@ -73,8 +78,12 @@ LOOTBOXES: list[Lootbox] = [
             "非中獎袋累積的星星也算「換來的書」，所以實際淨成本遠低於 100 抽 × 單價",
         ],
         observed_samples=[
-            ObservedSample(draws=20, total_stars=407, date="2026-06-26",
-                           note="站長實測 — 比 EV (1,398) 低 29%，落在常見變異範圍"),
+            ObservedSample(draws=20, total_stars=407, main_prize_count=0,
+                           date="2026-06-26-A",
+                           note="第一輪 — 0 本書，純星 407 = EV 的 29% (z = -0.72σ)"),
+            ObservedSample(draws=30, total_stars=600, main_prize_count=1,
+                           date="2026-06-26-B",
+                           note="第二輪 — 中 1 本，等值 3,600 星 = EV 30抽 (2,097) 的 172%"),
         ],
     ),
     # 之後新增福袋直接在這裡 append
@@ -170,25 +179,27 @@ def sigma_per_draw(box: Lootbox) -> float:
 
 
 def analyze_observation(box: Lootbox, draws: int, observed_stars: int,
+                         main_prize_count: int = 0,
                          channel_label: str | None = None) -> dict:
-    """給定一筆實測 (n 抽得 X 星)，分析其偏離 EV 的程度與實際每星成本."""
+    """給定一筆實測 (n 抽得 X 星 + M 本主獎)，分析偏離 EV 與實際成本."""
     if draws <= 0:
         return {}
     ev_per = total_ev_per_draw(box)
     sigma_per = sigma_per_draw(box)
+    # 等值星 = 星 + 主獎本數 × 兌換價
+    effective_stars = observed_stars + main_prize_count * box.main_prize_alt_value
     expected_total = draws * ev_per
     sigma_total = math.sqrt(draws) * sigma_per
-    z = (observed_stars - expected_total) / sigma_total if sigma_total > 0 else 0.0
-    # Approximate one-tailed p (lower) using erf
-    p_lower = 0.5 * (1 + math.erf(z / math.sqrt(2)))    # P(X <= observed)
-    ratio_vs_ev = observed_stars / expected_total if expected_total > 0 else 0
-    stars_per_draw_actual = observed_stars / draws
+    z = (effective_stars - expected_total) / sigma_total if sigma_total > 0 else 0.0
+    p_lower = 0.5 * (1 + math.erf(z / math.sqrt(2)))
+    ratio_vs_ev = effective_stars / expected_total if expected_total > 0 else 0
+    stars_per_draw_actual = effective_stars / draws
 
     cost_breakdown = []
     for ch in (box.purchase_channels if channel_label is None else
                 [c for c in box.purchase_channels if c.label == channel_label]):
         money_spent = ch.price * draws
-        cost_per_star_actual = money_spent / observed_stars if observed_stars > 0 else None
+        cost_per_star_actual = money_spent / effective_stars if effective_stars > 0 else None
         cost_per_star_ev     = ch.price / ev_per if ev_per > 0 else None
         cost_per_prize_actual = (cost_per_star_actual * box.main_prize_alt_value
                                   if cost_per_star_actual else None)
@@ -209,13 +220,27 @@ def analyze_observation(box: Lootbox, draws: int, observed_stars: int,
     return {
         "draws":              draws,
         "observed_stars":     observed_stars,
+        "main_prize_count":   main_prize_count,
+        "effective_stars":    effective_stars,
         "expected_stars":     expected_total,
         "stars_per_draw_actual": stars_per_draw_actual,
         "ev_per_draw":        ev_per,
         "ratio_vs_ev":        ratio_vs_ev,
         "sigma_total":        sigma_total,
         "z_score":            z,
-        "p_lower":            p_lower,        # 機率有此結果或更差
+        "p_lower":            p_lower,
         "p_lower_pct":        p_lower * 100,
         "cost_breakdown":     cost_breakdown,
     }
+
+
+def cumulative_observation(box: Lootbox) -> dict | None:
+    """所有 stored sample 合併的累計分析."""
+    if not box.observed_samples:
+        return None
+    total_draws = sum(s.draws for s in box.observed_samples)
+    total_stars = sum(s.total_stars for s in box.observed_samples)
+    total_books = sum(s.main_prize_count for s in box.observed_samples)
+    if total_draws == 0:
+        return None
+    return analyze_observation(box, total_draws, total_stars, total_books)
