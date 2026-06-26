@@ -4,7 +4,8 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -22,15 +23,24 @@ class PurchaseChannel:
 
 
 @dataclass
+class ObservedSample:
+    draws: int              # 實際開了幾包
+    total_stars: int        # 實際拿到多少星
+    date: str = ""          # YYYY-MM-DD
+    note: str = ""          # 補充
+
+
+@dataclass
 class Lootbox:
     id: str
     name: str
     rewards: list[Reward]
-    main_prize_name: str    # 大獎名稱 (對應 reward 之一)
-    main_prize_alt_value: int  # 大獎在另一系統的等值（讓玩家比較成本）
-    main_prize_alt_unit: str   # 等值單位名 (e.g. "群英之星")
+    main_prize_name: str
+    main_prize_alt_value: int
+    main_prize_alt_unit: str
     purchase_channels: list[PurchaseChannel]
     notes: list[str] = None
+    observed_samples: list[ObservedSample] = field(default_factory=list)
 
     def __post_init__(self):
         if self.notes is None:
@@ -61,6 +71,10 @@ LOOTBOXES: list[Lootbox] = [
         notes=[
             "進階之書可用 3,000 群英之星兌換，故視為等值",
             "非中獎袋累積的星星也算「換來的書」，所以實際淨成本遠低於 100 抽 × 單價",
+        ],
+        observed_samples=[
+            ObservedSample(draws=20, total_stars=407, date="2026-06-26",
+                           note="站長實測 — 比 EV (1,398) 低 29%，落在常見變異範圍"),
         ],
     ),
     # 之後新增福袋直接在這裡 append
@@ -141,3 +155,67 @@ def calc_for_target(box: Lootbox, channel_label: str, target_count: int) -> dict
 
 def get_box(box_id: str) -> Lootbox | None:
     return next((b for b in LOOTBOXES if b.id == box_id), None)
+
+
+# ───────────────────────── 變異 / 實測分析 ─────────────────────────
+def variance_per_draw(box: Lootbox) -> float:
+    """每抽星數的變異數 (Var[X] = E[X^2] - E[X]^2)."""
+    ev = total_ev_per_draw(box)
+    e_x2 = sum(r.prob * r.star_value ** 2 for r in box.rewards)
+    return e_x2 - ev ** 2
+
+
+def sigma_per_draw(box: Lootbox) -> float:
+    return math.sqrt(variance_per_draw(box))
+
+
+def analyze_observation(box: Lootbox, draws: int, observed_stars: int,
+                         channel_label: str | None = None) -> dict:
+    """給定一筆實測 (n 抽得 X 星)，分析其偏離 EV 的程度與實際每星成本."""
+    if draws <= 0:
+        return {}
+    ev_per = total_ev_per_draw(box)
+    sigma_per = sigma_per_draw(box)
+    expected_total = draws * ev_per
+    sigma_total = math.sqrt(draws) * sigma_per
+    z = (observed_stars - expected_total) / sigma_total if sigma_total > 0 else 0.0
+    # Approximate one-tailed p (lower) using erf
+    p_lower = 0.5 * (1 + math.erf(z / math.sqrt(2)))    # P(X <= observed)
+    ratio_vs_ev = observed_stars / expected_total if expected_total > 0 else 0
+    stars_per_draw_actual = observed_stars / draws
+
+    cost_breakdown = []
+    for ch in (box.purchase_channels if channel_label is None else
+                [c for c in box.purchase_channels if c.label == channel_label]):
+        money_spent = ch.price * draws
+        cost_per_star_actual = money_spent / observed_stars if observed_stars > 0 else None
+        cost_per_star_ev     = ch.price / ev_per if ev_per > 0 else None
+        cost_per_prize_actual = (cost_per_star_actual * box.main_prize_alt_value
+                                  if cost_per_star_actual else None)
+        cost_per_prize_ev    = (cost_per_star_ev * box.main_prize_alt_value
+                                 if cost_per_star_ev else None)
+        cost_breakdown.append({
+            "channel": ch.label,
+            "price_per_draw": ch.price,
+            "money_spent": money_spent,
+            "cost_per_star_actual": cost_per_star_actual,
+            "cost_per_star_ev":     cost_per_star_ev,
+            "cost_per_prize_actual": cost_per_prize_actual,
+            "cost_per_prize_ev":    cost_per_prize_ev,
+            "deviation_factor": (cost_per_star_actual / cost_per_star_ev
+                                  if (cost_per_star_actual and cost_per_star_ev) else None),
+        })
+
+    return {
+        "draws":              draws,
+        "observed_stars":     observed_stars,
+        "expected_stars":     expected_total,
+        "stars_per_draw_actual": stars_per_draw_actual,
+        "ev_per_draw":        ev_per,
+        "ratio_vs_ev":        ratio_vs_ev,
+        "sigma_total":        sigma_total,
+        "z_score":            z,
+        "p_lower":            p_lower,        # 機率有此結果或更差
+        "p_lower_pct":        p_lower * 100,
+        "cost_breakdown":     cost_breakdown,
+    }

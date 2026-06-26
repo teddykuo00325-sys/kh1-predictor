@@ -167,16 +167,33 @@ def lootbox_page(box_id: str = ""):
         target_count = 1
     channel_for_calc = request.args.get("channel", box.purchase_channels[0].label)
 
+    # 實測校正參數
+    try:
+        obs_draws = int(request.args.get("obs_draws", 0))
+    except ValueError:
+        obs_draws = 0
+    try:
+        obs_stars = int(request.args.get("obs_stars", 0))
+    except ValueError:
+        obs_stars = 0
+    obs_analysis = None
+    if obs_draws > 0 and obs_stars >= 0:
+        obs_analysis = lootbox_data.analyze_observation(box, obs_draws, obs_stars)
+
     return render_template("lootbox.html",
         all_boxes=lootbox_data.LOOTBOXES,
         box=box,
         rewards=lootbox_data.reward_breakdown(box),
         ev=lootbox_data.total_ev_per_draw(box),
+        sigma=lootbox_data.sigma_per_draw(box),
         prob_sum=lootbox_data.prob_sum(box),
         channels=lootbox_data.channel_analysis(box),
         target_count=target_count,
         channel_for_calc=channel_for_calc,
         target_result=lootbox_data.calc_for_target(box, channel_for_calc, target_count),
+        obs_draws=obs_draws,
+        obs_stars=obs_stars,
+        obs_analysis=obs_analysis,
     )
 
 

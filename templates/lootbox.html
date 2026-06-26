@@ -157,6 +157,126 @@
   {% endif %}
 </div>
 
+<!-- ────────────  實測校正計算機  ──────────── -->
+<div class="card" style="border-color:var(--accent);">
+  <h2>五、🔬 實測校正計算機</h2>
+  <p class="muted">
+    EV (期望值) 是長期平均，單次運氣會偏離。把你實際開的結果丟進來，看「實際每星成本」與
+    「結果是不是異常」(以標準差衡量)。每抽 σ = <b>{{ sigma|round(1) }}</b> 星
+    （表示單抽星數分布的散布度）。
+  </p>
+
+  <form method="get" action="/lootbox/{{ box.id }}#實測" class="toolbar" style="align-items:center;">
+    我開了
+    <input type="number" name="obs_draws" value="{{ obs_draws or 20 }}" min="1" max="999" style="width:80px;">
+    抽，總共獲得
+    <input type="number" name="obs_stars" value="{{ obs_stars or '' }}" min="0" style="width:100px;" placeholder="星數">
+    顆 {{ box.main_prize_alt_unit }}
+    <button type="submit">分析</button>
+    {% if obs_analysis %}<a href="/lootbox/{{ box.id }}" class="muted" style="padding:6px 10px;">↻ 清除</a>{% endif %}
+  </form>
+
+  {% if obs_analysis %}
+  <div id="實測" style="margin-top:14px;background:var(--panel-2);padding:16px 20px;border-radius:8px;">
+    <p style="margin:0 0 10px;font-size:15px;">
+      <b>{{ obs_analysis.draws }} 抽 → {{ obs_analysis.observed_stars }} 星</b>
+      （期望 {{ obs_analysis.expected_stars|round(0)|int }} 星，
+      實際 / 期望 =
+      <b style="color:{% if obs_analysis.ratio_vs_ev < 0.7 %}var(--bad){% elif obs_analysis.ratio_vs_ev < 0.9 %}var(--warn){% elif obs_analysis.ratio_vs_ev > 1.1 %}var(--good){% else %}var(--muted){% endif %};">
+        {{ (obs_analysis.ratio_vs_ev * 100)|round(0) }}%
+      </b>）
+    </p>
+
+    <table style="font-size:13px;">
+      <tr>
+        <td>z-score (偏離期望值的標準差數)</td>
+        <td>
+          <b style="color:{% if obs_analysis.z_score < -1 %}var(--bad){% elif obs_analysis.z_score < -0.3 %}var(--warn){% elif obs_analysis.z_score > 0.3 %}var(--good){% else %}var(--muted){% endif %};">
+            {{ obs_analysis.z_score|round(2) }} σ
+          </b>
+        </td>
+      </tr>
+      <tr>
+        <td>結果在「至少這麼差」的機率</td>
+        <td>
+          約 <b>{{ obs_analysis.p_lower_pct|round(1) }}%</b>
+          {% if obs_analysis.p_lower_pct > 20 %}
+            <span class="muted">(常見變異)</span>
+          {% elif obs_analysis.p_lower_pct > 5 %}
+            <span style="color:var(--warn);">(略低於平均)</span>
+          {% elif obs_analysis.p_lower_pct > 1 %}
+            <span style="color:var(--bad);">(罕見壞運)</span>
+          {% else %}
+            <span style="color:var(--bad);">(極罕見 - 可能機率公告與實際有出入?)</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>每抽實際星數</td>
+        <td><b>{{ obs_analysis.stars_per_draw_actual|round(2) }}</b> 星 <span class="muted">(期望 {{ obs_analysis.ev_per_draw|round(1) }})</span></td>
+      </tr>
+    </table>
+
+    <h4 style="margin:14px 0 6px;">💸 實際每星 / 每本書成本</h4>
+    <table>
+      <tr>
+        <th>通路</th>
+        <th>已花</th>
+        <th>實際每星成本</th>
+        <th>EV 預期每星</th>
+        <th>實際每本書</th>
+        <th>EV 預期每本書</th>
+      </tr>
+      {% for cb in obs_analysis.cost_breakdown %}
+      <tr>
+        <td><b>{{ cb.channel }}</b> ({{ cb.price_per_draw }}元/抽)</td>
+        <td>{{ cb.money_spent }} 元</td>
+        <td><b style="color:var(--bad);">{{ cb.cost_per_star_actual|round(2) }} 元</b></td>
+        <td class="muted">{{ cb.cost_per_star_ev|round(2) }} 元</td>
+        <td><b style="color:var(--bad);">{{ cb.cost_per_prize_actual|round(0)|int }} 元</b></td>
+        <td class="muted">{{ cb.cost_per_prize_ev|round(0)|int }} 元</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <p class="muted" style="font-size:12px;margin-top:10px;">
+      ⚠ <b>單筆觀察不代表機率不準</b> — z-score ≤ -1.5 才開始有統計疑慮。
+      要確認機率有沒有問題，需要累積至少數百抽的樣本。
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ────────────  已紀錄的實測樣本  ──────────── -->
+{% if box.observed_samples %}
+<div class="card">
+  <h2>六、📋 已記錄的實測樣本</h2>
+  <p class="muted">站長 / 玩家提供的真實開包紀錄。樣本越多，越能驗證機率公告是否準確。</p>
+  <table>
+    <tr><th>日期</th><th>抽數</th><th>實得星數</th><th>vs EV</th><th>備註</th></tr>
+    {% for s in box.observed_samples %}
+    {% set actual = s.total_stars %}
+    {% set expected = (s.draws * ev) %}
+    {% set ratio = (actual / expected * 100)|round(0) if expected > 0 else 0 %}
+    <tr>
+      <td>{{ s.date }}</td>
+      <td>{{ s.draws }}</td>
+      <td>{{ s.total_stars }}</td>
+      <td>
+        <b style="color:{% if ratio < 70 %}var(--bad){% elif ratio < 90 %}var(--warn){% elif ratio > 110 %}var(--good){% else %}var(--muted){% endif %};">
+          {{ ratio }}%
+        </b>
+      </td>
+      <td class="muted" style="font-size:12px;">{{ s.note }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted" style="font-size:11px;margin-top:8px;">
+    💡 想要新增你自己的紀錄？到 <a href="/feedback">意見回饋</a> 留言告知抽數 + 星數，站長會匯入。
+  </p>
+</div>
+{% endif %}
+
 <!-- ────────────  Notes  ──────────── -->
 {% if box.notes %}
 <div class="card">
