@@ -198,17 +198,28 @@ def _segment_blocks(content_html: str) -> list[tuple[str, str]]:
     paragraphs = [el for el in soup.find_all(["p", "div"])
                    if not el.find(["p", "div"], recursive=True)]
 
+    def _strip_ws(s: str) -> str:
+        return "".join(s.split())
+
     for p in paragraphs:
         text = p.get_text("\n", strip=True)
         if not text:
             continue
-        strong = p.find("strong")
-        if strong and strong.get_text(strip=True) == text and _is_header_text(text):
-            flush()
-            current_title = text
-            current_body = []
-        else:
-            current_body.append(text)
+        # Editor sometimes splits one title across multiple <strong> tags
+        # (e.g. <strong>八門全開...</strong><strong>up</strong><strong>！</strong>).
+        # Concatenate ALL strongs in this paragraph and compare to the paragraph
+        # text (whitespace-insensitive) to detect a header.
+        strongs = p.find_all("strong")
+        if strongs:
+            joined_strong = _strip_ws("".join(s.get_text() for s in strongs))
+            plain_text    = _strip_ws(p.get_text())
+            title_text    = p.get_text(" ", strip=True)
+            if joined_strong == plain_text and _is_header_text(title_text):
+                flush()
+                current_title = title_text
+                current_body = []
+                continue
+        current_body.append(text)
     flush()
 
     # Drop empty blocks and prelude-only-no-body
