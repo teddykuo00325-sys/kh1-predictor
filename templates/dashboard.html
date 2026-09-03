@@ -260,8 +260,8 @@
       <tr><th>門檻</th><th>贈品</th><th>歷年出現</th><th>信心</th><th>原文</th></tr>
       {% for g in p.recharge_candidates %}
       <tr>
-        <td><b>滿 {{ g.threshold }} 元</b></td>
-        <td>{{ g.gift_name }} × {{ g.qty_example or 1 }}</td>
+        <td><b>{% if g.threshold %}滿 {{ g.threshold }} 元{% else %}依排名{% endif %}</b></td>
+        <td>{{ g.gift_name }}{% if g.qty_example %} × {{ g.qty_example }}{% endif %}</td>
         <td>{{ g.years_seen|join(', ') }} <span class="muted">({{ g.occurrences }} 次)</span></td>
         <td style="width:140px;">{{ (g.confidence*100)|round(0) }}%{{ confbar(g.confidence) }}</td>
         <td class="muted">{{ g.raw_text_example }}</td>

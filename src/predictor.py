@@ -46,12 +46,8 @@ RECENT_END_DAYS = 60
 DEFAULT_LOOK_BACK_DAYS = 14
 DEFAULT_LOOK_FORWARD_DAYS = 45
 
-# Activities we never want to count as "festival activities" — administrative noise.
-NOISE_NAME_PREFIXES = ("(前言)", "(無標題)", "★", "活動時間", "活動獎勵", "活動說明",
-                       "獎勵說明", "消費金額", "獲獎城池", "備註")
-NOISE_NAME_CONTAINS = ("得獎名單", "中獎名單")
-NOISE_ARTICLE_KEYWORDS = ("得獎名單", "中獎名單", "反詐騙", "防範盜用", "防騙宣導",
-                          "排程", "維護開機", "維護關機")
+# Administrative noise — the rules live in `analyzer` so the dashboard and the
+# predictor never disagree about what counts as a real activity.
 NOISE_KINDS_FOR_FESTIVAL = {"version"}    # version-update articles aren't festival activities
 
 # Activities whose advertised "period" is longer than this many days are almost
@@ -60,15 +56,8 @@ MAX_REASONABLE_PERIOD_DAYS = 90
 
 
 def _is_noise_activity(a: dict) -> bool:
-    name = (a.get("name") or "").strip()
-    if any(name.startswith(p) for p in NOISE_NAME_PREFIXES):
-        return True
-    if any(k in name for k in NOISE_NAME_CONTAINS):
-        return True
-    title = a.get("article_title") or ""
-    if any(k in title for k in NOISE_ARTICLE_KEYWORDS):
-        return True
-    return False
+    return (analyzer.is_noise_name(a.get("name") or "")
+            or analyzer.is_noise_article_title(a.get("article_title") or ""))
 
 
 def _period_too_long(a: dict) -> bool:
@@ -776,7 +765,9 @@ def _print_report(p: dict):
     if not p["recharge_candidates"]:
         print("  (此月份歷年無儲值贈品紀錄)")
     for g in p["recharge_candidates"]:
-        print(f"  • 滿 {g['threshold']:>6} 元 → 贈 {g['gift_name']}  "
+        # threshold 0 means the gift is awarded by recharge ranking, not an amount
+        tier = f"滿 {g['threshold']:>6} 元" if g["threshold"] else "依排名      "
+        print(f"  • {tier} → 贈 {g['gift_name']}  "
               f"(信心 {int(g['confidence']*100):>3}%, 歷年 {g['years_seen']})")
 
 

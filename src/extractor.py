@@ -50,6 +50,26 @@ RECHARGE_PLAIN_RE = re.compile(
 # Sentinels we must NOT capture as a gift name
 BAD_GIFT_PREFIXES = ("依此", "每單", "每筆", "不限")
 
+# ---------------------------------------------------- recharge tables
+# Since 2024 the 活動公告 editor puts recharge gifts in a 3-column table rather
+# than a prose sentence, so neither regex above ever matches them:
+#
+#   活動時間                          | 活動獎勵      | 活動資格( 所有玩家)
+#   08/13(四) 12:00 ~ 08/20(四) 09:00 | 兵法二十四篇  | 當週儲值金額達5000以上，可參加抽獎
+#   08/13(四) 12:00 ~ 08/27(四) 09:00 | 再生石箱(自選) | 單筆儲值達10000送1箱、20000送2箱，依此類推
+#   08/13(四) 12:00 ~ 08/20(四) 09:00 | 頂級飾品箱★   | 當週儲值總額達前5名
+#
+# Each data row is one gift with its own period, so we parse the table directly.
+TABLE_TIME_LABELS   = ("活動時間", "活動期間")
+TABLE_GIFT_LABELS   = ("活動獎勵", "獎勵")
+TABLE_COND_LABELS   = ("活動資格", "資格", "活動條件")
+
+# "當週儲值金額達5000以上" / "當週儲值滿5000" / "單筆儲值達1000送1組、10000送10組"
+# (a tiered row keeps its lowest tier — that is the entry threshold)
+TABLE_THRESHOLD_RE = re.compile(r"儲值(?:金額|總額)?\s*[達滿到]\s*([0-9,]+)")
+# "當週儲值總額達前5名" — rank-based, there is no amount threshold
+TABLE_RANK_RE = re.compile(r"儲值(?:金額|總額)?\s*達?\s*前\s*(\d+)\s*名")
+
 VERSION_RE = re.compile(r"(\d+\.\d+\.\d+\.\d+)\s*版本")
 
 
@@ -231,40 +251,120 @@ def _segment_blocks(content_html: str) -> list[tuple[str, str]]:
     return cleaned
 
 
-def extract_recharge_gifts(article_id: int, body: str, period_start: str | None,
-                            period_end: str | None) -> list[dict]:
-    out: list[dict] = []
-    seen: set[tuple[int, str]] = set()  # dedup within article
+class _GiftSink:
+    """Collects recharge-gift rows for one article, deduping on (threshold, gift)."""
 
-    def _add(threshold: int, qty: int | None, gift: str, raw: str):
-        gift = gift.strip().strip("，。 ")
+    def __init__(self, article_id: int):
+        self.article_id = article_id
+        self.rows: list[dict] = []
+        self._by_key: dict[tuple[int | None, str], dict] = {}
+
+    def add(self, threshold: int | None, qty: int | None, gift: str, raw: str,
+            period_start: str | None, period_end: str | None) -> None:
+        # The quoted and plain prose patterns both match the same sentence, so
+        # strip the 「」 too — otherwise 「轉生石」 and 轉生石 land as two rows.
+        gift = gift.strip().strip("，。 「」『』")
         if not gift or any(gift.startswith(p) for p in BAD_GIFT_PREFIXES):
             return
         key = (threshold, gift[:24])
-        if key in seen:
+        prev = self._by_key.get(key)
+        if prev is not None:
+            # Same gift listed once per week (four rows for a month-long event):
+            # keep one row and widen its period to the whole run.
+            self._widen(prev, period_start, period_end)
             return
-        seen.add(key)
-        out.append({
-            "article_id": article_id,
+        row = {
+            "article_id": self.article_id,
             "threshold": threshold,
             "gift_name": gift,
             "gift_qty": qty,
             "period_start": period_start,
             "period_end": period_end,
             "raw_text": raw.strip(),
-        })
+        }
+        self._by_key[key] = row
+        self.rows.append(row)
+
+    @staticmethod
+    def _widen(row: dict, start: str | None, end: str | None) -> None:
+        if start and (not row["period_start"] or start < row["period_start"]):
+            row["period_start"] = start
+        if end and (not row["period_end"] or end > row["period_end"]):
+            row["period_end"] = end
+
+
+def extract_recharge_gifts(article_id: int, body: str, period_start: str | None,
+                            period_end: str | None,
+                            sink: _GiftSink | None = None) -> list[dict]:
+    """Prose form: '每單筆儲值達5,000元(含)以上，即贈送1個祝福晶石箱'."""
+    sink = sink or _GiftSink(article_id)
 
     for m in RECHARGE_QUOTED_RE.finditer(body):
         threshold = int(m.group(1).replace(",", ""))
         qty = int(m.group(2)) if m.group(2) else 1
-        gift = m.group(3)
-        _add(threshold, qty, gift, m.group(0))
+        sink.add(threshold, qty, m.group(3), m.group(0), period_start, period_end)
     for m in RECHARGE_PLAIN_RE.finditer(body):
         threshold = int(m.group(1).replace(",", ""))
         qty = int(m.group(2))
-        gift = m.group(3)
-        _add(threshold, qty, gift, m.group(0))
-    return out
+        sink.add(threshold, qty, m.group(3), m.group(0), period_start, period_end)
+    return sink.rows
+
+
+def _cell_text(cell) -> str:
+    """Cell text with the editor's stray spaces inside words collapsed away.
+
+    The news editor breaks words across <span>s, so '活動時 間' and
+    '再生石箱( 自選)' are common — strip whitespace entirely, but keep newlines
+    as item separators for multi-gift cells.
+    """
+    lines = [("".join(ln.split())) for ln in cell.get_text("\n", strip=True).split("\n")]
+    return "\n".join(ln for ln in lines if ln)
+
+
+def _label_index(cells: list[str], labels: tuple[str, ...]) -> int | None:
+    for i, c in enumerate(cells):
+        if any(c.startswith(lb) for lb in labels):
+            return i
+    return None
+
+
+def extract_recharge_tables(article_id: int, content, fallback_year: int,
+                             sink: _GiftSink) -> None:
+    """Table form — see the TABLE_* patterns above.  Appends into `sink`."""
+    for table in content.find_all("table"):
+        rows = table.find_all("tr")
+        if len(rows) < 2:
+            continue
+        header = None
+        for idx, r in enumerate(rows):
+            cells = [_cell_text(c) for c in r.find_all(["td", "th"])]
+            t_i = _label_index(cells, TABLE_TIME_LABELS)
+            g_i = _label_index(cells, TABLE_GIFT_LABELS)
+            c_i = _label_index(cells, TABLE_COND_LABELS)
+            if t_i is not None and g_i is not None and c_i is not None:
+                header = (idx, t_i, g_i, c_i)
+                break
+        if header is None:
+            continue
+        hdr_row, t_i, g_i, c_i = header
+        need = max(t_i, g_i, c_i) + 1
+
+        for r in rows[hdr_row + 1:]:
+            cells = [_cell_text(c) for c in r.find_all(["td", "th"])]
+            if len(cells) < need:
+                continue                      # 註： footnote rows, merged cells
+            cond = cells[c_i].replace("\n", "")
+            if "儲值" not in cond:
+                continue
+            gift = "、".join(cells[g_i].split("\n"))
+            if not gift:
+                continue
+            start_dt, end_dt = parse_date_range(cells[t_i], fallback_year)
+            m = TABLE_THRESHOLD_RE.search(cond)
+            threshold = int(m.group(1).replace(",", "")) if m else None
+            if threshold is None and not TABLE_RANK_RE.search(cond):
+                continue                      # no amount and no rank — not a gift tier
+            sink.add(threshold, None, gift, cond, start_dt, end_dt)
 
 
 def process_article(row, conn) -> tuple[int, int]:
@@ -324,7 +424,12 @@ def process_article(row, conn) -> tuple[int, int]:
         period = (None, None); attach_id = None
 
     n_gift = 0
-    for g in extract_recharge_gifts(row["id"], full_text, period[0], period[1]):
+    sink = _GiftSink(row["id"])
+    # Tables first: each row carries its own period, which beats the article-level
+    # fallback the prose scan has to use.  Dedup then keeps the better row.
+    extract_recharge_tables(row["id"], content, pub_year, sink)
+    extract_recharge_gifts(row["id"], full_text, period[0], period[1], sink)
+    for g in sink.rows:
         conn.execute(
             """INSERT INTO recharge_gifts
                (article_id, activity_id, threshold, gift_name, gift_qty, period_start, period_end, raw_text)

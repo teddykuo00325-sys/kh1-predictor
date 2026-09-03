@@ -112,11 +112,19 @@ def recharge_history() -> list[dict]:
 
 _SIG_PUNCT_RE = re.compile(r"[「」『』，,。、！!？\?\s·．:：()（）２３４５６７８９０1234567890]+")
 _NOISE_KINDS = {"version"}
-_NOISE_NAME_PREFIXES = ("(前言)", "(無標題)", "★", "活動時間", "活動獎勵", "活動說明",
-                        "獎勵說明", "消費金額", "獲獎城池", "備註")
+# `※…` lines are editorial notices ("※以下更新內容，都需要重新開啟遊戲跑更新。"), and
+# the rest are table-section labels the segmenter picks up as if they were titles.
+_NOISE_NAME_PREFIXES = ("(前言)", "(無標題)", "★", "※", "活動時間", "活動獎勵", "活動說明",
+                        "活動資格", "獎勵說明", "消費金額", "獲獎城池", "備註",
+                        "道具說明", "調整說明", "職業技能調整", "其他項目更新",
+                        "懸賞內容", "New ")
 _NOISE_NAME_CONTAINS = ("得獎名單", "中獎名單")
 _NOISE_ARTICLE_KEYWORDS = ("得獎名單", "中獎名單", "反詐騙", "防範盜用", "防騙宣導",
                             "排程", "維護開機", "維護關機")
+# Section labels read like "使用後戰印效果" / "懸賞內容( 每日)" — a bare noun phrase
+# ending in a descriptive suffix.  Real activity titles are sales copy and
+# essentially always carry a "！".
+_NOISE_LABEL_RE = re.compile(r"^[^！!]{2,14}(說明|效果|資格|內容|調整)\s*(\([^)]{0,10}\))?$")
 _MAX_REASONABLE_PERIOD_DAYS = 90
 
 
@@ -135,14 +143,27 @@ def _activity_key(a: dict) -> str:
     return _normalize_signature(a.get("name") or "")
 
 
-def _is_noise(a: dict) -> bool:
-    name = (a.get("name") or "").strip()
+def is_noise_name(name: str) -> bool:
+    """True for extraction artefacts: bracket tags, table labels, editor notices.
+
+    Shared with `predictor` so both layers hide the same rows.
+    """
+    name = (name or "").strip()
     if any(name.startswith(p) for p in _NOISE_NAME_PREFIXES):
         return True
     if any(k in name for k in _NOISE_NAME_CONTAINS):
         return True
-    title = a.get("article_title") or ""
-    if any(k in title for k in _NOISE_ARTICLE_KEYWORDS):
+    return bool(_NOISE_LABEL_RE.match(name))
+
+
+def is_noise_article_title(title: str) -> bool:
+    return any(k in (title or "") for k in _NOISE_ARTICLE_KEYWORDS)
+
+
+def _is_noise(a: dict) -> bool:
+    if is_noise_name(a.get("name") or ""):
+        return True
+    if is_noise_article_title(a.get("article_title") or ""):
         return True
     return a.get("kind") in _NOISE_KINDS
 

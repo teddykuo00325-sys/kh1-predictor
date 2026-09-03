@@ -32,7 +32,7 @@
   <h2>儲值贈品條目</h2>
   <ul>
     {% for g in gifts %}
-      <li>滿 <b>{{ g.threshold }}</b> 元 → {{ g.gift_name }} × {{ g.gift_qty }} <span class="muted">— {{ g.raw_text }}</span></li>
+      <li>{% if g.threshold %}滿 <b>{{ g.threshold }}</b> 元{% else %}<b>依排名</b>{% endif %} → {{ g.gift_name }}{% if g.gift_qty %} × {{ g.gift_qty }}{% endif %} <span class="muted">— {{ g.raw_text }}</span></li>
     {% endfor %}
   </ul>
 </div>

@@ -8,9 +8,9 @@
     {% for r in rows %}
     <tr>
       <td>{{ r.publish_date }}</td>
-      <td><b>滿 {{ r.threshold }} 元</b></td>
+      <td><b>{% if r.threshold %}滿 {{ r.threshold }} 元{% else %}依排名{% endif %}</b></td>
       <td>{{ r.gift_name }}</td>
-      <td>{{ r.gift_qty }}</td>
+      <td>{{ r.gift_qty or '' }}</td>
       <td class="muted">{{ r.period_start or '' }}<br>{{ r.period_end or '' }}</td>
       <td class="muted">{{ r.raw_text }}</td>
       <td><a href="/article/{{ r.article_id }}">#{{ r.article_id }}</a></td>
