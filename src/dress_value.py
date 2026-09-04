@@ -54,6 +54,7 @@ COINS_ARE_PER_PIECE = False
 DRESS_SETS: list[DressSet] = [
     DressSet("骷髏在這 2件套",   pieces=2, coins=100, hp=700),
     DressSet("黑魔女三件套",     pieces=3, coins=30,  hp=480),
+    DressSet("德古拉三件套",     pieces=3, coins=30,  hp=480),
     DressSet("法老6件套",        pieces=6, coins=30,  hp=320),
     DressSet("白狼2件套",        pieces=2, coins=10,  hp=160),
     DressSet("龍舟三件套",       pieces=3, coins=30,  constitution=16),
@@ -94,8 +95,18 @@ def evaluate(coin_twd: int = EVENT.coin_twd,
             "twd_per_hp_raw": coin_cost / hp if hp else None,
         })
     rows.sort(key=lambda r: (r["twd_per_hp"] is None, r["twd_per_hp"] or 0))
+    # Sets that are reskins of each other (黑魔女 / 德古拉) tie exactly, so share a
+    # rank rather than being arbitrarily ordered 1st and 2nd.
+    rank = 0
+    prev: float | None = None
     for i, r in enumerate(rows, 1):
-        r["rank"] = i if r["twd_per_hp"] is not None else None
+        if r["twd_per_hp"] is None:
+            r["rank"] = None
+            continue
+        if prev is None or abs(r["twd_per_hp"] - prev) > 1e-9:
+            rank = i
+            prev = r["twd_per_hp"]
+        r["rank"] = rank
     return rows
 
 

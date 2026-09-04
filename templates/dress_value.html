@@ -22,7 +22,7 @@
 
   {% if best %}
   <div class="kpi">
-    <div><b>{{ best.set.name }}</b><span>最便宜 HP 來源</span></div>
+    <div><b style="font-size:17px;">{{ best_names }}</b><span>最便宜 HP 來源</span></div>
     <div><b>{{ '%.2f'|format(best.twd_per_hp) }}</b><span>元 / HP</span></div>
     <div><b>{{ '{:,}'.format(best.total_cost) }}</b><span>整套總成本 (元)</span></div>
     <div><b>{{ best.hp|int }}</b><span>整套 HP</span></div>

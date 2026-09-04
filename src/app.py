@@ -232,6 +232,9 @@ def dress_value_page():
         # "why enchanting decides it" table can be read against each other
         raw_rows=sorted(rated, key=lambda r: r["twd_per_hp_raw"]),
         best=rated[0] if rated else None,
+        # reskins of the same set tie for 1st — name them all in the KPI
+        best_names=" / ".join(r["set"].name for r in rated
+                               if rated and r["rank"] == rated[0]["rank"]),
         worst=rated[-1] if rated else None,
         max_hp_row=max(rated, key=lambda r: r["hp"]) if rated else None,
         break_even=break_even,
