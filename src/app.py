@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 
 from . import (analyzer, backtest, daily_tasks, db, dress_strategy,
-                level_data, lootbox_data, notify, predictor)
+                dress_value, level_data, lootbox_data, notify, predictor)
 from .feedback import bp as feedback_bp
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -201,6 +201,45 @@ def lootbox_page(box_id: str = ""):
         obs_books=obs_books,
         obs_analysis=obs_analysis,
         cumulative=cumulative,
+    )
+
+
+@app.route("/dress-value")
+def dress_value_page():
+    """扮裝性價比 — 活動代幣兌換的套裝，每 1 HP 要花多少台幣."""
+    def _num(key: str, default: float, lo: float, hi: float) -> float:
+        try:
+            v = float(request.args.get(key, default))
+        except (TypeError, ValueError):
+            v = default
+        return max(lo, min(hi, v))
+
+    coin_twd    = int(_num("coin", dress_value.EVENT.coin_twd, 1, 100_000))
+    enchant_twd = int(_num("enchant", dress_value.ENCHANT_TWD_PER_PIECE, 0, 100_000))
+    con_to_hp   = _num("con", 0, 0, 10_000)
+    coins_per_piece = request.args.get("mode", "piece" if dress_value.COINS_ARE_PER_PIECE
+                                                else "total") == "piece"
+
+    rows = dress_value.evaluate(coin_twd=coin_twd, enchant_twd=enchant_twd,
+                                 con_to_hp=con_to_hp, coins_per_piece=coins_per_piece)
+    rated = [r for r in rows if r["twd_per_hp"] is not None]
+    break_even = dress_value.break_even_con_to_hp(rows)
+    con_row = next((r for r in rows if r["set"].constitution and not r["set"].hp), None)
+    return render_template("dress_value.html",
+        event=dress_value.EVENT,
+        rows=rows,
+        # same rows, but ordered by the coins-only cost so the two columns of the
+        # "why enchanting decides it" table can be read against each other
+        raw_rows=sorted(rated, key=lambda r: r["twd_per_hp_raw"]),
+        best=rated[0] if rated else None,
+        worst=rated[-1] if rated else None,
+        max_hp_row=max(rated, key=lambda r: r["hp"]) if rated else None,
+        break_even=break_even,
+        break_even_total_hp=(break_even * con_row["set"].constitution
+                              if break_even and con_row else None),
+        con_row=con_row,
+        coin_twd=coin_twd, enchant_twd=enchant_twd,
+        con_to_hp=con_to_hp, coins_per_piece=coins_per_piece,
     )
 
 

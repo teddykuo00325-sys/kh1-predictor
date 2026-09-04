@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}扮裝性價比{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>💎 {{ event.name }} — 每 1 HP 要花多少台幣</h2>
+  <form class="toolbar" method="get">
+    <label class="muted">{{ event.coin_name }} 單價
+      <input type="number" name="coin" value="{{ coin_twd }}" min="1" style="width:80px;"> 元</label>
+    <label class="muted">加持成本
+      <input type="number" name="enchant" value="{{ enchant_twd }}" min="0" step="50" style="width:90px;"> 元/件</label>
+    <label class="muted">1 點體魄 =
+      <input type="number" name="con" value="{{ con_to_hp }}" min="0" step="0.5" style="width:70px;"> HP</label>
+    <label class="muted">代幣數字為
+      <select name="mode">
+        <option value="total" {% if not coins_per_piece %}selected{% endif %}>整套總價</option>
+        <option value="piece" {% if coins_per_piece %}selected{% endif %}>每件單價</option>
+      </select></label>
+    <button type="submit">重算</button>
+    <a href="/dress-value" class="muted" style="align-self:center;">↻ 預設</a>
+  </form>
+
+  {% if best %}
+  <div class="kpi">
+    <div><b>{{ best.set.name }}</b><span>最便宜 HP 來源</span></div>
+    <div><b>{{ '%.2f'|format(best.twd_per_hp) }}</b><span>元 / HP</span></div>
+    <div><b>{{ '{:,}'.format(best.total_cost) }}</b><span>整套總成本 (元)</span></div>
+    <div><b>{{ best.hp|int }}</b><span>整套 HP</span></div>
+  </div>
+  {% endif %}
+  <p class="muted" style="margin-bottom:0;">
+    總成本 = {{ event.coin_name }} 數 × {{ coin_twd }} 元 ＋ 件數 × {{ enchant_twd }} 元加持。
+    資料來源：{{ event.source }}（{{ event.as_of }}）。
+  </p>
+</div>
+
+<div class="card">
+  <h2>🏆 HP 性價比排名</h2>
+  <table>
+    <tr>
+      <th style="width:40px;">#</th><th>套裝</th><th>件數</th>
+      <th>{{ event.coin_name }}</th><th>代幣成本</th><th>加持成本</th>
+      <th>總成本</th><th>HP</th><th>元 / HP</th><th style="width:150px;">加持佔總成本</th>
+    </tr>
+    {% for r in rows if r.twd_per_hp %}
+    <tr>
+      <td>{% if r.rank == 1 %}🥇{% elif r.rank == 2 %}🥈{% elif r.rank == 3 %}🥉{% else %}{{ r.rank }}{% endif %}</td>
+      <td><b>{{ r.set.name }}</b></td>
+      <td>{{ r.set.pieces }}</td>
+      <td>{{ r.coin_total }}</td>
+      <td class="muted">{{ '{:,}'.format(r.coin_cost) }}</td>
+      <td class="muted">{{ '{:,}'.format(r.enchant_cost) }}</td>
+      <td><b>{{ '{:,}'.format(r.total_cost) }}</b></td>
+      <td>{{ r.hp|int }}</td>
+      <td><b style="color:var({{ '--good' if r.rank == 1 else '--text' }});">{{ '%.2f'|format(r.twd_per_hp) }}</b></td>
+      <td>
+        {{ (r.enchant_share*100)|round(0)|int }}%
+        <div class="bar"><span style="width:{{ (r.enchant_share*100)|round(0)|int }}%"></span></div>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2>🔍 為什麼是加持費在決定排名</h2>
+  <p class="muted">
+    把加持拿掉、只看代幣，排名會完全不同 — 這欄是「只算 {{ event.coin_name }}」的元/HP：
+  </p>
+  <table>
+    <tr><th>套裝</th><th>只算代幣 (元/HP)</th><th>含加持 (元/HP)</th><th>加持讓成本變成幾倍</th></tr>
+    {% for r in raw_rows if r.twd_per_hp_raw %}
+    <tr>
+      <td>{{ r.set.name }}</td>
+      <td>{{ '%.2f'|format(r.twd_per_hp_raw) }}</td>
+      <td>{{ '%.2f'|format(r.twd_per_hp) }}</td>
+      <td class="muted">×{{ '%.1f'|format(r.twd_per_hp / r.twd_per_hp_raw) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted" style="margin-bottom:0;">
+    加持是<b>按件</b>收費，件數少的套裝天生佔優勢。所以「代幣便宜」不等於「划算」——
+    {% if worst %}{{ worst.set.name }}代幣只要 {{ worst.coin_total }} 顆卻墊底，就是被
+    {{ worst.set.pieces }} 件加持（{{ '{:,}'.format(worst.enchant_cost) }} 元，佔
+    {{ (worst.enchant_share*100)|round(0)|int }}%）吃掉的。{% endif %}
+  </p>
+</div>
+
+{% set unrated = rows | rejectattr('twd_per_hp') | list %}
+{% if unrated %}
+<div class="card">
+  <h2>⚖ 無法直接比較</h2>
+  <table>
+    <tr><th>套裝</th><th>件數</th><th>總成本</th><th>加成</th><th>說明</th></tr>
+    {% for r in unrated %}
+    <tr>
+      <td>{{ r.set.name }}</td>
+      <td>{{ r.set.pieces }}</td>
+      <td>{{ '{:,}'.format(r.total_cost) }}</td>
+      <td>
+        {%- if r.set.constitution %}體魄 +{{ r.set.constitution }}{% endif -%}
+        {%- if r.set.other %}{{ r.set.other }}{% endif -%}
+      </td>
+      <td class="muted">
+        {% if r.set.constitution %}
+          體魄會轉成 HP，但換算率未知。填上方「1 點體魄 = ? HP」即可納入排名。
+        {% else %}
+          不是 HP，性質不同不列入同一把尺。
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if break_even %}
+  <p class="muted" style="margin-bottom:0;">
+    <b>{{ con_row.set.name }}的門檻</b>：要打敗目前第一名的
+    {{ '%.2f'|format(best.twd_per_hp) }} 元/HP，1 點體魄至少得換到
+    <b style="color:var(--accent);">{{ '%.1f'|format(break_even) }} HP</b>
+    （整套需 ≥ {{ break_even_total_hp|round(0)|int }} HP）。低於這個數字就不如直接買
+    {{ best.set.name }}。
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>📌 怎麼用這頁</h2>
+  <ul class="muted" style="margin:0;">
+    <li><b>只想用最少錢換最多 HP</b> → 看排名第一。</li>
+    <li><b>要衝到某個 HP 數字</b> → 看「整套 HP」欄。單套最高的是
+        {{ max_hp_row.set.name }}（{{ max_hp_row.hp|int }} HP），件數不夠時還是得往它走，
+        即使單位成本不是最低。</li>
+    <li><b>活動換贈品了</b> → 改 <code>src/dress_value.py</code> 的
+        <code>EVENT</code> 與 <code>DRESS_SETS</code> 兩個常數，這頁會自動重算。</li>
+    <li><b>代幣單價或加持費變了</b> → 直接改上方欄位，不必動程式碼。</li>
+  </ul>
+</div>
+
+{% endblock %}
