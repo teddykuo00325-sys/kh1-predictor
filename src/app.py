@@ -206,7 +206,7 @@ def lootbox_page(box_id: str = ""):
 
 @app.route("/dress-value")
 def dress_value_page():
-    """扮裝性價比 — 活動代幣兌換的套裝，每 1 HP 要花多少台幣."""
+    """扮裝性價比 — 活動代幣兌換的套裝，每 1 點屬性要花多少台幣."""
     def _num(key: str, default: float, lo: float, hi: float) -> float:
         try:
             v = float(request.args.get(key, default))
@@ -216,31 +216,33 @@ def dress_value_page():
 
     coin_twd    = int(_num("coin", dress_value.EVENT.coin_twd, 1, 100_000))
     enchant_twd = int(_num("enchant", dress_value.ENCHANT_TWD_PER_PIECE, 0, 100_000))
-    con_to_hp   = _num("con", 0, 0, 10_000)
+    con_to_hp   = _num("con", dress_value.CONSTITUTION_TO_HP, 0, 10_000)
     coins_per_piece = request.args.get("mode", "piece" if dress_value.COINS_ARE_PER_PIECE
                                                 else "total") == "piece"
+    opts = dict(coin_twd=coin_twd, enchant_twd=enchant_twd,
+                coins_per_piece=coins_per_piece)
 
-    rows = dress_value.evaluate(coin_twd=coin_twd, enchant_twd=enchant_twd,
-                                 con_to_hp=con_to_hp, coins_per_piece=coins_per_piece)
-    rated = [r for r in rows if r["twd_per_hp"] is not None]
-    break_even = dress_value.break_even_con_to_hp(rows)
-    con_row = next((r for r in rows if r["set"].constitution and not r["set"].hp), None)
+    groups = dress_value.rankings(con_to_hp=con_to_hp, **opts)
+    hp_group = next((g for g in groups if g["stat"] == "hp"), None)
+
+    # Strictly-dominated sets, gathered across every stat into one warning list
+    dominated = []
+    for g in groups:
+        by_name = {r["set"].name: r for r in g["rows"]}
+        for r in g["rows"]:
+            if r["dominated_by"]:
+                dominated.append({"label": g["label"], "row": r,
+                                   "better": by_name[r["dominated_by"]]})
+
     return render_template("dress_value.html",
         event=dress_value.EVENT,
-        rows=rows,
-        # same rows, but ordered by the coins-only cost so the two columns of the
+        groups=groups,
+        hp_group=hp_group,
+        # same HP rows ordered by the coins-only cost, so the two columns of the
         # "why enchanting decides it" table can be read against each other
-        raw_rows=sorted(rated, key=lambda r: r["twd_per_hp_raw"]),
-        best=rated[0] if rated else None,
-        # reskins of the same set tie for 1st — name them all in the KPI
-        best_names=" / ".join(r["set"].name for r in rated
-                               if rated and r["rank"] == rated[0]["rank"]),
-        worst=rated[-1] if rated else None,
-        max_hp_row=max(rated, key=lambda r: r["hp"]) if rated else None,
-        break_even=break_even,
-        break_even_total_hp=(break_even * con_row["set"].constitution
-                              if break_even and con_row else None),
-        con_row=con_row,
+        raw_rows=sorted(hp_group["rows"], key=lambda r: r["cost_per_raw"]) if hp_group else [],
+        dominated=dominated,
+        break_even=dress_value.break_even_con_to_hp(**opts),
         coin_twd=coin_twd, enchant_twd=enchant_twd,
         con_to_hp=con_to_hp, coins_per_piece=coins_per_piece,
     )
