@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}官方福袋資料庫{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>📦 官方福袋資料庫</h2>
+  {% if not available %}
+    <p class="muted">
+      尚未匯入官方資料。在專案目錄執行 <code>python -m src.gamedata</code> 後重新整理即可
+      （約 9MB，數秒完成）。
+    </p>
+  {% else %}
+  <form class="toolbar" method="get">
+    <input type="text" name="q" value="{{ q }}" placeholder="福袋名稱，或裡面的獎品名稱…"
+           style="min-width:320px;">
+    <button type="submit">搜尋</button>
+    <a href="/lootbox-db" class="muted" style="align-self:center;">↻ 清除</a>
+  </form>
+  <p class="muted" style="margin-bottom:0;">
+    資料來源：<a href="https://kh1-web.uj.com.tw/gamedata/" target="_blank" rel="noopener">官方遊戲資料庫</a>
+    （資料日期 {{ build_date }}）。<b>搜尋獎品名稱</b>可以反查「哪些福袋開得出這個東西」。
+    機率為官方公布值，未經實測校正。
+  </p>
+  {% endif %}
+</div>
+
+{% if detail %}
+<div class="card">
+  <h2>🎁 {{ detail.box.name }}
+    <span class="muted" style="font-weight:400;">#{{ detail.box.item_id }}</span></h2>
+  <div class="kpi" style="margin-bottom:14px;">
+    <div><b>{{ detail.box.pool_count }}</b><span>隨機獎品種類</span></div>
+    {% if detail.box.prob_sum %}
+    <div><b>{{ '%.2f'|format(detail.box.prob_sum) }}%</b><span>機率總和</span></div>
+    {% endif %}
+    {% if detail.box.fixed_count %}
+    <div><b>{{ detail.box.fixed_count }}</b><span>必得獎品</span></div>
+    {% endif %}
+    {% if detail.box.optional %}
+    <div><b>自選</b><span>開啟後可指定一項</span></div>
+    {% endif %}
+  </div>
+
+  {% if detail.box.prob_sum and (detail.box.prob_sum < 99 or detail.box.prob_sum > 101) %}
+  <p><span class="pill warn">機率總和 {{ '%.2f'|format(detail.box.prob_sum) }}%</span>
+    <span class="muted">官方公布的就是這個數字 — 通常代表還有未公開的獎品，別當成資料匯入錯誤。</span></p>
+  {% endif %}
+
+  {% if detail.fixed %}
+  <h3 style="font-size:14px;color:var(--good);">必得</h3>
+  <table>
+    <tr><th>獎品</th><th style="width:90px;">數量</th><th style="width:100px;">物品 ID</th></tr>
+    {% for f in detail.fixed %}
+    <tr><td>{{ f.reward_name }}</td><td>{{ f.qty or 1 }}</td>
+        <td class="muted">{{ f.reward_id or '—' }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  {% if detail.pool %}
+  <h3 style="font-size:14px;">{{ '可選內容' if detail.box.optional else '隨機獎品' }}</h3>
+  <table>
+    <tr><th>獎品</th><th style="width:90px;">機率</th><th style="width:170px;"></th>
+        <th style="width:100px;">物品 ID</th></tr>
+    {% for p in detail.pool %}
+    <tr>
+      <td>{{ p.reward_name }}{% if p.prob_max and p.prob_max != p.prob %}
+          <span class="muted">~{{ p.prob_max }}%</span>{% endif %}</td>
+      <td><b>{{ p.prob }}%</b></td>
+      <td><div class="bar"><span style="width:{{ [p.prob or 0, 100]|min }}%"></span></div></td>
+      <td class="muted">{{ p.reward_id or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  <p class="muted" style="margin-bottom:0;"><a href="/lootbox-db{% if q %}?q={{ q }}{% endif %}">← 回清單</a></p>
+</div>
+{% endif %}
+
+{% if available %}
+<div class="card">
+  <h2>🔎 {% if q %}「{{ q }}」的結果{% else %}福袋清單{% endif %}
+    <span class="muted" style="font-weight:400;">{{ boxes|length }} 筆{% if boxes|length >= 60 %}（上限 60，請縮小關鍵字）{% endif %}</span></h2>
+  {% if not boxes %}
+    <p class="muted">沒有符合的福袋。試試獎品名稱，例如「轉生石」、「群英之星」。</p>
+  {% else %}
+  <table>
+    <tr><th>福袋</th><th style="width:110px;">獎品種類</th><th style="width:110px;">機率總和</th>
+        <th style="width:90px;">類型</th><th style="width:90px;">ID</th></tr>
+    {% for b in boxes %}
+    <tr>
+      <td><a href="/lootbox-db?box={{ b.item_id }}{% if q %}&q={{ q }}{% endif %}"><b>{{ b.name }}</b></a></td>
+      <td>{{ b.pool_count }}{% if b.fixed_count %} <span class="muted">+{{ b.fixed_count }} 必得</span>{% endif %}</td>
+      <td>
+        {% if b.prob_sum %}
+          {% if b.prob_sum >= 99 and b.prob_sum <= 101 %}
+            <span class="muted">{{ '%.1f'|format(b.prob_sum) }}%</span>
+          {% else %}
+            <span class="pill warn">{{ '%.1f'|format(b.prob_sum) }}%</span>
+          {% endif %}
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td>{% if b.optional %}<span class="pill">自選</span>{% else %}<span class="muted">隨機</span>{% endif %}</td>
+      <td class="muted">{{ b.item_id }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

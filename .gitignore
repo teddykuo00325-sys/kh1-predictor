@@ -18,6 +18,7 @@ Thumbs.db
 # Project — generated at build time on the server; safe to omit locally too.
 # (Keep `data/` directory itself via .gitkeep so the app can write into it.)
 data/news.db
+data/gamedata.db
 data/raw_html/
 data/*.db-journal
 

@@ -26,8 +26,40 @@
     {% else %}
       <span class="pill good">✓ 機率合法</span>
     {% endif %}
+    {% if official %}
+      {% if official.matches %}
+        <span class="pill good">✓ 已對過官方資料庫（{{ official.build_date }}）</span>
+      {% else %}
+        <span class="pill warn">⚠ 與官方資料庫有 {{ official.mismatches }} 處不符</span>
+      {% endif %}
+    {% endif %}
   </p>
 </div>
+
+{% if official and not official.matches %}
+<div class="card">
+  <h2>⚠ 與官方資料庫不符</h2>
+  <p class="muted">
+    本頁機率是人工輸入的，官方資料庫（<a href="/lootbox-db?box={{ official.official_id }}">#{{ official.official_id }}</a>，
+    資料日期 {{ official.build_date }}）對不上以下項目。多半是遊戲改過福袋內容，數值要重新確認。
+  </p>
+  <table>
+    <tr><th>獎品</th><th>本頁</th><th>官方</th></tr>
+    {% for r in official.rows if not r.ok %}
+    <tr>
+      <td>{{ r.name }}</td>
+      <td>{{ (r.ours * 100)|round(3) }}%</td>
+      <td>{% if r.official is none %}<span class="muted">官方沒有這個獎品</span>
+          {% else %}<b>{{ (r.official * 100)|round(3) }}%</b>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    {% for n in official.extra %}
+    <tr><td>{{ n }}</td><td><span class="muted">未登錄</span></td>
+        <td><span class="pill warn">官方有、本頁沒有</span></td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
 
 <!-- ────────────  Reward table & EV  ──────────── -->
 <div class="card">

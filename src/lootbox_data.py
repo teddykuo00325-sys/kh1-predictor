@@ -46,6 +46,8 @@ class Lootbox:
     purchase_channels: list[PurchaseChannel]
     notes: list[str] = None
     observed_samples: list[ObservedSample] = field(default_factory=list)
+    # 官方資料庫的物品 ID。填了就能自動核對機率，不必再靠人工盯著公告抄。
+    official_id: int | None = None
 
     def __post_init__(self):
         if self.notes is None:
@@ -66,6 +68,7 @@ LOOTBOXES: list[Lootbox] = [
             Reward("群英之星(10)",   0.25, 10),
             Reward("群英之星(3)",    0.30, 3),
         ],
+        official_id=56637,
         main_prize_name="士兵體力進階之書",
         main_prize_alt_value=3000,
         main_prize_alt_unit="群英之星",
@@ -164,6 +167,41 @@ def calc_for_target(box: Lootbox, channel_label: str, target_count: int) -> dict
 
 def get_box(box_id: str) -> Lootbox | None:
     return next((b for b in LOOTBOXES if b.id == box_id), None)
+
+
+def official_check(box: Lootbox) -> dict | None:
+    """Compare this box's hand-entered probabilities against the official DB.
+
+    The numbers here were typed in from in-game text, so they can drift when the
+    game rebalances a box and nobody notices.  Returns None when the box has no
+    `official_id` or the gamedata import hasn't run — the page then just shows
+    the curated numbers as before.
+    """
+    if not box.official_id:
+        return None
+    from . import gamedata
+    pool = gamedata.official_pool(box.official_id)
+    if not pool:
+        return None
+
+    rows, mismatches = [], 0
+    for r in box.rewards:
+        off = pool.get(r.name)
+        # 1e-9 absorbs the float noise of percent → fraction conversion
+        ok = off is not None and abs(off - r.prob) < 1e-9
+        if not ok:
+            mismatches += 1
+        rows.append({"name": r.name, "ours": r.prob, "official": off, "ok": ok})
+    # rewards the official pool has that we never entered
+    extra = [n for n in pool if not any(r.name == n for r in box.rewards)]
+    return {
+        "build_date": gamedata.build_date(),
+        "official_id": box.official_id,
+        "rows": rows,
+        "extra": extra,
+        "mismatches": mismatches + len(extra),
+        "matches": mismatches == 0 and not extra,
+    }
 
 
 # ───────────────────────── 變異 / 實測分析 ─────────────────────────

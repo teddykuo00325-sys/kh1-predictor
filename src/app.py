@@ -8,7 +8,8 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 
 from . import (analyzer, backtest, daily_tasks, db, dress_strategy,
-                dress_value, level_data, lootbox_data, notify, predictor)
+                dress_value, gamedata, level_data, lootbox_data, notify,
+                predictor)
 from .feedback import bp as feedback_bp
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -201,6 +202,24 @@ def lootbox_page(box_id: str = ""):
         obs_books=obs_books,
         obs_analysis=obs_analysis,
         cumulative=cumulative,
+        official=lootbox_data.official_check(box),
+    )
+
+
+@app.route("/lootbox-db")
+def lootbox_db():
+    """官方福袋資料庫 — 直接查 kh1-web.uj.com.tw/gamedata 匯入的機率表."""
+    q = request.args.get("q", "").strip()
+    try:
+        box_id = int(request.args.get("box", 0))
+    except ValueError:
+        box_id = 0
+    return render_template("lootbox_db.html",
+        available=gamedata.available(),
+        build_date=gamedata.build_date(),
+        q=q,
+        boxes=gamedata.search_boxes(q),
+        detail=gamedata.box_contents(box_id) if box_id else None,
     )
 
 

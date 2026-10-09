@@ -5,12 +5,15 @@ services:
     plan: free
     pythonVersion: "3.11"
     # Build-time: install deps, then scrape every article and extract activities
-    # into data/news.db.  The resulting DB lives inside Render's build artifact,
-    # so it survives container sleep/wake cycles until the next deploy.
+    # into data/news.db, and pull the official game database into
+    # data/gamedata.db.  Both DBs live inside Render's build artifact, so they
+    # survive container sleep/wake cycles until the next deploy.  A gamedata
+    # fetch failure is logged and skipped rather than failing the build.
     buildCommand: |
       pip install -r requirements.txt
       python -m src.scraper
       python -m src.extractor
+      python -m src.gamedata
       python -m src.restore_feedback
     # Runtime: gunicorn (production WSGI), single worker is plenty for free tier
     # (limited to 0.1 CPU / 512MB).  Threads handle concurrent requests cheaply.
