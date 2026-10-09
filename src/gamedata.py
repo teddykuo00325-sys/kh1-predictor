@@ -131,16 +131,41 @@ def get_meta(key: str, default: str | None = None) -> str | None:
 
 
 # ------------------------------------------------------------------ fetch
+ERROR_PATH = db.DATA_DIR / "gamedata_error.txt"
+
+
+def last_error() -> str | None:
+    """Why the last import failed, for the page to show instead of a bare blank."""
+    try:
+        return ERROR_PATH.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
 def _fetch_js(name: str, version: str | None) -> dict | list:
-    """GET data/<name>.js and unwrap its `window.X = <json>;` assignment."""
+    """GET data/<name>.js and unwrap its `window.X = <json>;` assignment.
+
+    items.js is 7.5MB, and the free Render instance has 512MB, so this streams
+    to disk and decodes from an offset rather than slicing: holding the response
+    body, `.text` and a sliced copy at once would be three copies of it.
+    """
     url = f"{BASE}/data/{name}.js"
-    r = requests.get(url, headers=HEADERS, timeout=TIMEOUT,
-                      params={"v": version} if version else None)
-    r.raise_for_status()
-    r.encoding = "utf-8"
-    text = r.text.lstrip()
-    eq = text.index("=")
-    return json.loads(text[eq + 1:].rstrip().rstrip(";"))
+    tmp = db.DATA_DIR / f".gamedata_{name}.tmp"
+    db.ensure_dirs()
+    with requests.get(url, headers=HEADERS, timeout=TIMEOUT, stream=True,
+                       params={"v": version} if version else None) as r:
+        r.raise_for_status()
+        with tmp.open("wb") as fh:
+            for chunk in r.iter_content(chunk_size=1 << 16):
+                fh.write(chunk)
+    try:
+        text = tmp.read_text(encoding="utf-8")
+        # raw_decode reads from an index and ignores the trailing ";"
+        obj, _ = json.JSONDecoder().raw_decode(text, text.index("=") + 1)
+        return obj
+    finally:
+        del text
+        tmp.unlink(missing_ok=True)
 
 
 def _num(v) -> float | None:
@@ -241,10 +266,19 @@ def main() -> None:
     args = ap.parse_args()
     try:
         run(force=args.force)
-    except requests.RequestException as e:
-        # The news data is the project's core; a gamedata outage must not fail
-        # the Render build.
-        print(f"[gamedata] fetch failed ({e}) -> skipping, site will fall back", file=sys.stderr)
+        ERROR_PATH.unlink(missing_ok=True)
+    except Exception as e:
+        # The news data is the project's core, so a gamedata problem must not
+        # fail the Render build — but it must not vanish either, or the page
+        # just says "not imported" with no way to tell why from outside.
+        reason = f"{type(e).__name__}: {e}"
+        print(f"[gamedata] FAILED -> {reason}", file=sys.stderr)
+        print("[gamedata] site will fall back to showing this reason", file=sys.stderr)
+        try:
+            db.ensure_dirs()
+            ERROR_PATH.write_text(reason[:500], encoding="utf-8")
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":

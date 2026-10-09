@@ -217,6 +217,7 @@ def lootbox_db():
     return render_template("lootbox_db.html",
         available=gamedata.available(),
         build_date=gamedata.build_date(),
+        import_error=gamedata.last_error(),
         q=q,
         boxes=gamedata.search_boxes(q),
         detail=gamedata.box_contents(box_id) if box_id else None,

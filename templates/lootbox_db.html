@@ -5,10 +5,19 @@
 <div class="card">
   <h2>📦 官方福袋資料庫</h2>
   {% if not available %}
-    <p class="muted">
-      尚未匯入官方資料。在專案目錄執行 <code>python -m src.gamedata</code> 後重新整理即可
-      （約 9MB，數秒完成）。
-    </p>
+    {% if import_error %}
+      <p><span class="pill bad">匯入失敗</span></p>
+      <pre>{{ import_error }}</pre>
+      <p class="muted">
+        上次執行 <code>python -m src.gamedata</code> 時出錯，原因如上。部署環境上這行跑在
+        build 階段，失敗不會中斷 build，所以網站照常運作、只是這頁沒有資料。
+      </p>
+    {% else %}
+      <p class="muted">
+        尚未匯入官方資料。在專案目錄執行 <code>python -m src.gamedata</code> 後重新整理即可
+        （約 9MB，數秒完成）。
+      </p>
+    {% endif %}
   {% else %}
   <form class="toolbar" method="get">
     <input type="text" name="q" value="{{ q }}" placeholder="福袋名稱，或裡面的獎品名稱…"
