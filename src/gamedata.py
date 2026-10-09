@@ -142,13 +142,33 @@ def last_error() -> str | None:
         return None
 
 
-def _fetch_js(name: str, version: str | None) -> dict | list:
-    """GET data/<name>.js and unwrap its `window.X = <json>;` assignment.
+STATUS_PATH = db.DATA_DIR / "gamedata_status.txt"
 
-    items.js is 7.5MB, and the free Render instance has 512MB, so this streams
-    to disk and decodes from an offset rather than slicing: holding the response
-    body, `.text` and a sliced copy at once would be three copies of it.
+
+def status() -> str | None:
+    """How far the last import got.
+
+    A build that is killed outright — an out-of-memory kill is a SIGKILL, so no
+    `except` runs — leaves no error behind, which is indistinguishable from the
+    step never having run at all.  A breadcrumb per stage tells the two apart.
     """
+    try:
+        return STATUS_PATH.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def _mark(step: str) -> None:
+    try:
+        db.ensure_dirs()
+        STATUS_PATH.write_text(step, encoding="utf-8")
+    except OSError:
+        pass
+    print(f"[gamedata] {step}")
+
+
+def _download(name: str, version: str | None) -> Path:
+    """Stream data/<name>.js to a temp file.  Caller deletes it."""
     url = f"{BASE}/data/{name}.js"
     tmp = db.DATA_DIR / f".gamedata_{name}.tmp"
     db.ensure_dirs()
@@ -158,13 +178,44 @@ def _fetch_js(name: str, version: str | None) -> dict | list:
         with tmp.open("wb") as fh:
             for chunk in r.iter_content(chunk_size=1 << 16):
                 fh.write(chunk)
+    return tmp
+
+
+def _decode(path: Path):
+    """Whole-file decode, for the small files."""
+    text = path.read_text(encoding="utf-8")
+    # raw_decode reads from an index, so no slice copy, and it stops at the ";"
+    obj, _ = json.JSONDecoder().raw_decode(text, text.index("=") + 1)
+    return obj
+
+
+def _iter_array(path: Path):
+    """Yield the elements of `window.X=[…]` one at a time.
+
+    items.js holds 9,583 items in 7.5MB; decoding it whole builds the entire
+    list of dicts before a single row is written, which is the one step here
+    big enough to matter on a 512MB instance.  Decoding element by element
+    keeps just the source text and one item alive.
+    """
+    text = path.read_text(encoding="utf-8")
+    dec = json.JSONDecoder()
+    i = text.index("[", text.index("=")) + 1
+    n = len(text)
+    while True:
+        while i < n and (text[i].isspace() or text[i] == ","):
+            i += 1
+        if i >= n or text[i] == "]":
+            return
+        obj, i = dec.raw_decode(text, i)
+        yield obj
+
+
+def _fetch_js(name: str, version: str | None) -> dict | list:
+    """Small files only — see `_iter_array` for items.js."""
+    tmp = _download(name, version)
     try:
-        text = tmp.read_text(encoding="utf-8")
-        # raw_decode reads from an index and ignores the trailing ";"
-        obj, _ = json.JSONDecoder().raw_decode(text, text.index("=") + 1)
-        return obj
+        return _decode(tmp)
     finally:
-        del text
         tmp.unlink(missing_ok=True)
 
 
@@ -188,7 +239,8 @@ def _store_meta(conn, meta: dict) -> None:
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value", rows)
 
 
-def _store_items(conn, items: list[dict]) -> tuple[int, int, int]:
+def _store_items(conn, items) -> tuple[int, int, int]:
+    """`items` may be a list or a generator — see `_iter_array`."""
     conn.execute("DELETE FROM gd_lootbox_pool")
     conn.execute("DELETE FROM gd_lootbox_fixed")
     conn.execute("DELETE FROM gd_lootbox")
@@ -240,6 +292,7 @@ def _store_items(conn, items: list[dict]) -> tuple[int, int, int]:
 
 def run(force: bool = False) -> None:
     init_schema()
+    _mark("fetching meta.js")
     meta = _fetch_js("meta", None)
     build_date = meta.get("build_date", "")
     local = get_meta("build_date")
@@ -248,15 +301,16 @@ def run(force: bool = False) -> None:
         print("[gamedata] already current -> skip  (use --force to re-import)")
         return
 
-    print(f"[gamedata] fetching items.js (~7.5MB) ...")
-    items = _fetch_js("items", build_date.replace("-", "") or None)
-    print(f"[gamedata] parsed {len(items)} items")
-
-    with cursor() as conn:
-        n_items, n_boxes, n_pool = _store_items(conn, items)
-        _store_meta(conn, meta)
-    print(f"[gamedata] stored items={n_items}  福袋={n_boxes}  獎品條目={n_pool}")
-    print("[gamedata] done")
+    _mark("downloading items.js (~7.5MB)")
+    tmp = _download("items", build_date.replace("-", "") or None)
+    try:
+        _mark(f"decoding + storing items.js ({tmp.stat().st_size:,} bytes)")
+        with cursor() as conn:
+            n_items, n_boxes, n_pool = _store_items(conn, _iter_array(tmp))
+            _store_meta(conn, meta)
+    finally:
+        tmp.unlink(missing_ok=True)
+    _mark(f"done — items={n_items} 福袋={n_boxes} 獎品條目={n_pool}")
 
 
 def main() -> None:

@@ -218,6 +218,7 @@ def lootbox_db():
         available=gamedata.available(),
         build_date=gamedata.build_date(),
         import_error=gamedata.last_error(),
+        import_status=gamedata.status(),
         q=q,
         boxes=gamedata.search_boxes(q),
         detail=gamedata.box_contents(box_id) if box_id else None,

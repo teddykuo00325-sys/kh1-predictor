@@ -12,10 +12,19 @@
         上次執行 <code>python -m src.gamedata</code> 時出錯，原因如上。部署環境上這行跑在
         build 階段，失敗不會中斷 build，所以網站照常運作、只是這頁沒有資料。
       </p>
+    {% elif import_status %}
+      <p><span class="pill warn">匯入中斷</span></p>
+      <p class="muted">最後完成的步驟：</p>
+      <pre>{{ import_status }}</pre>
+      <p class="muted">
+        匯入有開始跑但沒跑完，而且沒留下錯誤訊息 — 通常代表行程被直接砍掉
+        （記憶體不足的 OOM kill 是 SIGKILL，攔不到也來不及寫錯誤檔）。
+      </p>
     {% else %}
       <p class="muted">
-        尚未匯入官方資料。在專案目錄執行 <code>python -m src.gamedata</code> 後重新整理即可
-        （約 9MB，數秒完成）。
+        尚未匯入官方資料，<b>而且匯入程序完全沒有執行過</b>（連進度記錄都沒有）。
+        本機請執行 <code>python -m src.gamedata</code>；部署環境請確認 build command
+        有包含 <code>python -m src.gamedata</code> 這一行。
       </p>
     {% endif %}
   {% else %}
