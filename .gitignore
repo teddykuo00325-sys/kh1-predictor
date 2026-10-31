@@ -32,3 +32,6 @@ memory/
 
 # 打包產出 — scripts/build_package.ps1 生成，不進版控
 dist/
+
+# 個人擺攤帳本備份 — 不進公開版控
+data/三國擺攤_*.csv
