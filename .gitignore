@@ -29,3 +29,6 @@ data/*.db-journal
 .claude/
 CLAUDE.md
 memory/
+
+# 打包產出 — scripts/build_package.ps1 生成，不進版控
+dist/
