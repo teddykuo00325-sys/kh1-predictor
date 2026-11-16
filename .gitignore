@@ -19,6 +19,8 @@ Thumbs.db
 # (Keep `data/` directory itself via .gitkeep so the app can write into it.)
 data/news.db
 data/gamedata.db
+data/gamedata_status.txt
+data/gamedata_error.txt
 data/raw_html/
 data/*.db-journal
 

@@ -78,8 +78,12 @@ def _bracket_split(text: str) -> dict[str, str]:
     fields: dict[str, str] = {}
     # normalise full-width to half
     norm = text.replace("【", "[").replace("】", "]").replace("〔", "[").replace("〕", "]")
-    # find every [tag] and slice up
-    positions = [(m.start(), m.end(), m.group(1)) for m in re.finditer(r"\[([^\[\]\n]{2,8})\]", norm)]
+    # Find every [tag] and slice up.  The editor splits a tag across <span>s,
+    # so get_text() can leave newlines inside it ("[\n活動時間\n]") — allow
+    # whitespace within the brackets and strip it off the captured name, or the
+    # whole article parses with no 活動時間 and every activity loses its dates.
+    positions = [(m.start(), m.end(), "".join(m.group(1).split()))
+                  for m in re.finditer(r"\[([^\[\]]{2,12}?)\]", norm)]
     for i, (s, e, tag) in enumerate(positions):
         nxt = positions[i + 1][0] if i + 1 < len(positions) else len(norm)
         value = norm[e:nxt].strip().strip("：:").strip()
@@ -225,13 +229,19 @@ def _segment_blocks(content_html: str) -> list[tuple[str, str]]:
         text = p.get_text("\n", strip=True)
         if not text:
             continue
-        # Editor sometimes splits one title across multiple <strong> tags
+        # Editor sometimes splits one title across multiple bold tags
         # (e.g. <strong>八門全開...</strong><strong>up</strong><strong>！</strong>).
-        # Concatenate ALL strongs in this paragraph and compare to the paragraph
+        # Concatenate ALL of them in this paragraph and compare to the paragraph
         # text (whitespace-insensitive) to detect a header.
-        strongs = p.find_all("strong")
-        if strongs:
-            joined_strong = _strip_ws("".join(s.get_text() for s in strongs))
+        #
+        # Both tags count: the 11/05 活動公告 (#1692) is the first one whose
+        # titles are <b> rather than <strong>, and matching only <strong> left
+        # that whole article as a single untitled block.  A bold tag nested in
+        # another is skipped so its text is not counted twice.
+        bolds = [el for el in p.find_all(["strong", "b"])
+                  if not el.find_parent(["strong", "b"])]
+        if bolds:
+            joined_strong = _strip_ws("".join(s.get_text() for s in bolds))
             plain_text    = _strip_ws(p.get_text())
             title_text    = p.get_text(" ", strip=True)
             if joined_strong == plain_text and _is_header_text(title_text):
@@ -261,9 +271,13 @@ class _GiftSink:
 
     def add(self, threshold: int | None, qty: int | None, gift: str, raw: str,
             period_start: str | None, period_end: str | None) -> None:
+        # The editor splits a name across <span>s, so get_text() leaves newlines
+        # inside it ('品階洗煉箱\n(\n自選\n)').  These are Chinese item names —
+        # whitespace in them is always markup noise, never part of the name.
+        gift = "".join(gift.split())
         # The quoted and plain prose patterns both match the same sentence, so
         # strip the 「」 too — otherwise 「轉生石」 and 轉生石 land as two rows.
-        gift = gift.strip().strip("，。 「」『』")
+        gift = gift.strip("，。「」『』")
         if not gift or any(gift.startswith(p) for p in BAD_GIFT_PREFIXES):
             return
         key = (threshold, gift[:24])
